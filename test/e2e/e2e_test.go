@@ -421,7 +421,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 
 	// Players wanting Survival
 	for i := 0; i < 3; i++ {
-		playerID := fmt.Sprintf("survival-player-%s-%d", ulid.Make(), i)
+		playerID := fmt.Sprintf("survival-player-%s-%d", ulid.Make().String(), i)
 
 		playerMsg := game.MatchRequestMessage{
 			PlayerID: playerID,

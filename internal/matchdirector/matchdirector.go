@@ -238,7 +238,7 @@ func (md *MatchDirector) matchPlayers() error {
 	}
 
 	md.logger.Debug(
-		"Matching complete: found matches and created %d game sessions",
+		"Matching complete: found matches and created game sessions",
 		slog.Int("matches_found", matchesFound), slog.Int("sessions_created", sessionsCreated),
 	)
 	return nil
