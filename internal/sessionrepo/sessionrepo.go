@@ -25,7 +25,7 @@ const (
 
 type Session struct {
 	ID             string        `json:"session_id"`
-	HostIP         string        `json:"host_ip"`
+	HostID         string        `json:"host_id"`
 	Mode           game.GameMode `json:"mode"`
 	CreatedAt      time.Time     `json:"created_at"`
 	Players        []string      `json:"players"`

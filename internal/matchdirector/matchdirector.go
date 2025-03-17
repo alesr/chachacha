@@ -102,7 +102,7 @@ func (md *MatchDirector) matchPlayers() error {
 		if !exists {
 			session = &sessionrepo.Session{
 				ID:             ulid.Make().String(),
-				HostIP:         host.HostID,
+				HostID:         host.HostID,
 				Mode:           host.Mode,
 				CreatedAt:      time.Now(),
 				Players:        []string{},

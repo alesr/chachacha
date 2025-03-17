@@ -102,11 +102,11 @@ func TestMatchmaking(t *testing.T) {
 func testHostRegistration(t *testing.T, ch *amqp091.Channel, queueName string) {
 	// Create a host registration message
 
-	hostIP := "192.168.1.100"
+	hostID := "111"
 	gameMode := game.GameMode("1v1")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostID:         hostIP,
+		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 2,
 	}
@@ -173,11 +173,11 @@ func testPlayerRegistration(t *testing.T, ch *amqp091.Channel, queueName string)
 func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string, repo *sessionrepo.Redis) {
 	// Register another host
 
-	hostIP := "192.168.1.101"
+	hostID := "222"
 	gameMode := game.GameMode("2v2")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostID:         hostIP,
+		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 4,
 	}
@@ -253,7 +253,7 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 		if session != nil {
 			assert.GreaterOrEqual(t, len(session.Players), 1)
 			assert.Equal(t, gameMode, session.Mode)
-			assert.Equal(t, hostIP, session.HostIP)
+			assert.Equal(t, hostID, session.HostID)
 		} else {
 			t.Log("No 2v2 session found, which is unexpected")
 			t.Fail()
@@ -264,11 +264,11 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName string, repo *sessionrepo.Redis) {
 	// Register a new host
 
-	hostIP := "192.168.1.102"
+	hostID := "123"
 	gameMode := game.GameMode("free-for-all")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostID:         hostIP,
+		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 8,
 	}
@@ -298,7 +298,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 
 		playerMsg := game.MatchRequestMessage{
 			PlayerID: playerID,
-			HostID:   &hostIP,
+			HostID:   &hostID,
 		}
 
 		msgBody, err := json.Marshal(playerMsg)
@@ -328,7 +328,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 
 	var specificHostSession *sessionrepo.Session
 	for _, s := range sessions {
-		if s.HostIP == hostIP {
+		if s.HostID == hostID {
 			specificHostSession = s
 			break
 		}
@@ -344,11 +344,11 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, repo *sessionrepo.Redis) {
 	// Register two hosts with different game modes
 
-	hostIP1 := "192.168.1.103"
+	hostID1 := "321"
 	gameMode1 := game.GameMode("duel")
 
 	hostMsg1 := game.HostRegistratioMessage{
-		HostID:         hostIP1,
+		HostID:         hostID1,
 		Mode:           gameMode1,
 		AvailableSlots: 2,
 	}
@@ -370,11 +370,11 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	)
 	require.NoError(t, err)
 
-	hostIP2 := "192.168.1.104"
+	hostID2 := "456"
 	gameMode2 := game.GameMode("survival")
 
 	hostMsg2 := game.HostRegistratioMessage{
-		HostID:         hostIP2,
+		HostID:         hostID2,
 		Mode:           gameMode2,
 		AvailableSlots: 10,
 	}
@@ -474,14 +474,14 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	// Verify the duel session
 	assert.NotNil(t, duelsSession)
 	if duelsSession != nil {
-		assert.Equal(t, hostIP1, duelsSession.HostIP)
+		assert.Equal(t, hostID1, duelsSession.HostID)
 		assert.GreaterOrEqual(t, len(duelsSession.Players), 1)
 	}
 
 	// Verify the survival session
 	assert.NotNil(t, survivalSession)
 	if survivalSession != nil {
-		assert.Equal(t, hostIP2, survivalSession.HostIP)
+		assert.Equal(t, hostID2, survivalSession.HostID)
 		assert.GreaterOrEqual(t, len(survivalSession.Players), 1)
 	}
 }
