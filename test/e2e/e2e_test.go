@@ -22,6 +22,10 @@ import (
 )
 
 func TestMatchmaking(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e tests")
+	}
+
 	ctx := context.TODO()
 
 	redisContainer, redisAddr := startRedisContainer(t, ctx)
