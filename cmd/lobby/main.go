@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/alesr/chachacha/internal/config"
+	"github.com/alesr/chachacha/internal/events"
 	"github.com/alesr/chachacha/internal/matchregistry"
 	"github.com/alesr/chachacha/internal/sessionrepo"
 	"github.com/rabbitmq/amqp091-go"
@@ -60,6 +61,11 @@ func main() {
 
 	logger.Debug("Queue declared successfully", slog.String("queue_name", q.Name))
 
+	if err := events.SetupMonitoringQueues(ch); err != nil {
+		logger.Error("Failed to set up monitoring queues", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// Initialize match registry
 
 	repo, err := sessionrepo.NewRedisRepo(cfg.RedisAddr)
@@ -70,7 +76,13 @@ func main() {
 
 	logger.Info("Connected to Redis", slog.String("address", cfg.RedisAddr))
 
-	registry := matchregistry.New(logger, ch, cfg.QueueName, repo)
+	publisher, err := events.NewPublisher(ch)
+	if err != nil {
+		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
+		// Continue without event publishing capability
+	}
+
+	registry := matchregistry.New(logger, repo, cfg.QueueName, ch, publisher)
 
 	// Setup signal handler for graceful shutdown
 	sigChan := make(chan os.Signal, 1)

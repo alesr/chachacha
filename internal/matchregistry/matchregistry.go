@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	pubevents "github.com/alesr/chachacha/pkg/events"
 	"github.com/alesr/chachacha/pkg/game"
 	"github.com/rabbitmq/amqp091-go"
 )
@@ -18,30 +19,43 @@ type consumer interface {
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp091.Table) (<-chan amqp091.Delivery, error)
 }
 
+type publisher interface {
+	PublishGameCreated(ctx context.Context, event pubevents.GameCreatedEvent) error
+	PublishPlayerJoinRequestedEvent(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
+}
+
 type repository interface {
 	StoreHost(ctx context.Context, host game.HostRegistratioMessage) error
 	StorePlayer(ctx context.Context, player game.MatchRequestMessage) error
 }
 
 type MatchRegistry struct {
-	logger    *slog.Logger
-	queueName string
-	consumer  consumer
-	repo      repository
+	logger            *slog.Logger
+	repo              repository
+	consumerQueueName string
+	consumer          consumer
+	publisher         publisher
 }
 
-func New(logger *slog.Logger, consumer consumer, queueName string, repo repository) *MatchRegistry {
+func New(
+	logger *slog.Logger,
+	repo repository,
+	consumerQueueName string,
+	consumer consumer,
+	publisher publisher,
+) *MatchRegistry {
 	return &MatchRegistry{
-		logger:    logger.WithGroup("match_registry"),
-		queueName: queueName,
-		consumer:  consumer,
-		repo:      repo,
+		logger:            logger.WithGroup("match_registry"),
+		repo:              repo,
+		consumerQueueName: consumerQueueName,
+		consumer:          consumer,
+		publisher:         publisher,
 	}
 }
 
 func (mr *MatchRegistry) Start() error {
 	msgs, err := mr.consumer.Consume(
-		mr.queueName, // queue from which messages are consumed
+		mr.consumerQueueName, // queue from which messages are consumed
 		"match_registry_consumer",
 		true,  // auto-acknowledge: messages are automatically marked as delivered
 		false, // non-exclusive: allows multiple consumers on the same queue
@@ -50,7 +64,7 @@ func (mr *MatchRegistry) Start() error {
 		nil,   // additional arguments
 	)
 	if err != nil {
-		return fmt.Errorf("could not register consumer for queue '%s': %w", mr.queueName, err)
+		return fmt.Errorf("could not register consumer for queue '%s': %w", mr.consumerQueueName, err)
 	}
 
 	forever := make(chan bool)

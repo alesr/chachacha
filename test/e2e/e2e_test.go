@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alesr/chachacha/internal/events"
 	"github.com/alesr/chachacha/internal/matchdirector"
 	"github.com/alesr/chachacha/internal/matchregistry"
 	"github.com/alesr/chachacha/internal/sessionrepo"
@@ -52,7 +53,13 @@ func TestMatchmaking(t *testing.T) {
 		}),
 	)
 
-	registry := matchregistry.New(logger, ch, queueName, repo)
+	publisher, err := events.NewPublisher(ch)
+	if err != nil {
+		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
+		// Continue without event publishing capability
+	}
+
+	registry := matchregistry.New(logger, repo, queueName, ch, publisher)
 
 	matchInterval := 1 * time.Second
 	director, err := matchdirector.New(logger, repo, matchInterval)
