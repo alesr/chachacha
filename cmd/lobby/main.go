@@ -61,9 +61,19 @@ func main() {
 
 	logger.Debug("Queue declared successfully", slog.String("queue_name", q.Name))
 
-	if err := events.SetupMonitoringQueues(ch); err != nil {
-		logger.Error("Failed to set up monitoring queues", slog.String("error", err.Error()))
-		os.Exit(1)
+	// Create the publisher first, which will declare the exchanges
+	publisher, err := events.NewPublisher(ch)
+	if err != nil {
+		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
+		// Continue without event publishing capability
+	} else {
+		// Set up monitoring queues after exchanges are created
+		if err := events.SetupMonitoringQueues(ch); err != nil {
+			logger.Error("Failed to set up monitoring queues", slog.String("error", err.Error()))
+			os.Exit(1)
+		} else {
+			logger.Debug("Monitoring queues set up successfully")
+		}
 	}
 
 	// Initialize match registry
@@ -75,12 +85,6 @@ func main() {
 	}
 
 	logger.Info("Connected to Redis", slog.String("address", cfg.RedisAddr))
-
-	publisher, err := events.NewPublisher(ch)
-	if err != nil {
-		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
-		// Continue without event publishing capability
-	}
 
 	registry := matchregistry.New(logger, repo, cfg.QueueName, ch, publisher)
 

@@ -21,4 +21,4 @@ docker-compose -f test/manual/docker-compose.yml logs -f matcher
 ./test/manual/run-test.sh -mode player
 ```
 
-Additionally, you can access the RabbitMQ dashboard at `http://localhost:15672/`.
+Access the RabbitMQ dashboard at `http://localhost:15672/` to see the created events.

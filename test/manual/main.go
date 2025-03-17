@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alesr/chachacha/internal/config"
+	"github.com/alesr/chachacha/internal/events"
 	"github.com/alesr/chachacha/pkg/game"
 	"github.com/rabbitmq/amqp091-go"
 )
@@ -53,6 +54,16 @@ func main() {
 		nil,        // arguments
 	); err != nil {
 		log.Fatalf("Failed to declare a queue: %v", err)
+	}
+
+	// Create the publisher first to ensure exchanges are declared
+	if _, err := events.NewPublisher(ch); err != nil {
+		log.Fatalf("Failed to create event publisher: %v", err)
+	}
+
+	// Setup monitoring queues after exchanges have been created
+	if err := events.SetupMonitoringQueues(ch); err != nil {
+		log.Fatalf("Failed to set up monitoring queues: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
