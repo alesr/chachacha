@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/alesr/chachacha/internal/sessionrepo"
 	pubevents "github.com/alesr/chachacha/pkg/events"
 	"github.com/alesr/chachacha/pkg/game"
+	"github.com/alesr/chachacha/pkg/logutils"
 	"github.com/oklog/ulid/v2"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
@@ -48,11 +48,7 @@ func TestMatchmaking(t *testing.T) {
 	repo, err := sessionrepo.NewRedisRepo(redisAddr)
 	require.NoError(t, err)
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout,
-		&slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}),
-	)
+	logger := logutils.NewNoop()
 
 	publisher, err := events.NewPublisher(ch)
 	if err != nil {
