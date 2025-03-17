@@ -7,7 +7,7 @@ type GameMode string
 
 // HostRegistratioMessage represents the message payload for hosting a new game.
 type HostRegistratioMessage struct {
-	HostIP         string   `json:"host_ip"`
+	HostID         string   `json:"host_id"`
 	Mode           GameMode `json:"mode"`
 	AvailableSlots int8     `json:"available_slots"`
 }
@@ -15,6 +15,6 @@ type HostRegistratioMessage struct {
 // MatchRequestMessage represents the message payload for joining an existing game.
 type MatchRequestMessage struct {
 	PlayerID string    `json:"player_id"`
-	HostIP   *string   `json:"host_ip,omitempty"`
+	HostID   *string   `json:"host_id,omitempty"`
 	Mode     *GameMode `json:"mode,omitempty"`
 }

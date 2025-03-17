@@ -105,7 +105,7 @@ func testHostRegistration(t *testing.T, ch *amqp091.Channel, queueName string) {
 	gameMode := game.GameMode("1v1")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostIP:         hostIP,
+		HostID:         hostIP,
 		Mode:           gameMode,
 		AvailableSlots: 2,
 	}
@@ -176,7 +176,7 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 	gameMode := game.GameMode("2v2")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostIP:         hostIP,
+		HostID:         hostIP,
 		Mode:           gameMode,
 		AvailableSlots: 4,
 	}
@@ -267,7 +267,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 	gameMode := game.GameMode("free-for-all")
 
 	hostMsg := game.HostRegistratioMessage{
-		HostIP:         hostIP,
+		HostID:         hostIP,
 		Mode:           gameMode,
 		AvailableSlots: 8,
 	}
@@ -297,7 +297,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 
 		playerMsg := game.MatchRequestMessage{
 			PlayerID: playerID,
-			HostIP:   &hostIP,
+			HostID:   &hostIP,
 		}
 
 		msgBody, err := json.Marshal(playerMsg)
@@ -347,7 +347,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	gameMode1 := game.GameMode("duel")
 
 	hostMsg1 := game.HostRegistratioMessage{
-		HostIP:         hostIP1,
+		HostID:         hostIP1,
 		Mode:           gameMode1,
 		AvailableSlots: 2,
 	}
@@ -373,7 +373,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	gameMode2 := game.GameMode("survival")
 
 	hostMsg2 := game.HostRegistratioMessage{
-		HostIP:         hostIP2,
+		HostID:         hostIP2,
 		Mode:           gameMode2,
 		AvailableSlots: 10,
 	}

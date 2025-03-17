@@ -64,7 +64,7 @@ func NewRedisRepo(addr string) (*Redis, error) {
 }
 
 func (s *Redis) StoreHost(ctx context.Context, host game.HostRegistratioMessage) error {
-	key := hostKeyPrefix + host.HostIP
+	key := hostKeyPrefix + host.HostID
 
 	data, err := json.Marshal(host)
 	if err != nil {

@@ -44,15 +44,14 @@ func main() {
 	defer ch.Close()
 
 	// Ensure the queue exists
-	_, err = ch.QueueDeclare(
+	if _, err := ch.QueueDeclare(
 		*queueName, // queue name
 		false,      // durable
 		false,      // delete when unused
 		false,      // exclusive
 		false,      // no-wait
 		nil,        // arguments
-	)
-	if err != nil {
+	); err != nil {
 		log.Fatalf("Failed to declare a queue: %v", err)
 	}
 
@@ -71,7 +70,7 @@ func registerHost(ctx context.Context, ch *amqp091.Channel, queueName string) {
 	fmt.Println("=== Host Registration ===")
 
 	// Get host info
-	hostIP := readInput("Enter host IP (e.g., 192.168.1.100): ")
+	hostID := readInput("Enter host ID (e.g., 123): ")
 	gameMode := readInput("Enter game mode (e.g., 1v1, 2v2, free-for-all): ")
 	slotsStr := readInput("Enter available slots (e.g., 2, 4, 8): ")
 
@@ -82,7 +81,7 @@ func registerHost(ctx context.Context, ch *amqp091.Channel, queueName string) {
 
 	// Create host registration message
 	hostMsg := game.HostRegistratioMessage{
-		HostIP:         hostIP,
+		HostID:         hostID,
 		Mode:           game.GameMode(gameMode),
 		AvailableSlots: int8(slots),
 	}
@@ -93,7 +92,7 @@ func registerHost(ctx context.Context, ch *amqp091.Channel, queueName string) {
 		log.Fatalf("Failed to marshal host message: %v", err)
 	}
 
-	err = ch.PublishWithContext(
+	if err := ch.PublishWithContext(
 		ctx,
 		"",        // exchange
 		queueName, // routing key
@@ -104,13 +103,12 @@ func registerHost(ctx context.Context, ch *amqp091.Channel, queueName string) {
 			Type:        "host_registration",
 			Body:        msgBody,
 		},
-	)
-	if err != nil {
+	); err != nil {
 		log.Fatalf("Failed to publish message: %v", err)
 	}
 
 	fmt.Printf("\nHost registration sent successfully!\n")
-	fmt.Printf("Host IP: %s\n", hostIP)
+	fmt.Printf("Host ID: %s\n", hostID)
 	fmt.Printf("Game Mode: %s\n", gameMode)
 	fmt.Printf("Available Slots: %d\n", slots)
 }
@@ -128,7 +126,7 @@ func registerPlayer(ctx context.Context, ch *amqp091.Channel, queueName string) 
 	// Optional parameters
 	fmt.Println("The following parameters are optional. Press Enter to skip.")
 
-	hostIP := readInput("Enter specific host IP (optional): ")
+	hostID := readInput("Enter specific host ID (optional): ")
 	gameMode := readInput("Enter preferred game mode (optional): ")
 
 	// Create player registration message
@@ -137,8 +135,8 @@ func registerPlayer(ctx context.Context, ch *amqp091.Channel, queueName string) 
 	}
 
 	// Set optional fields
-	if hostIP != "" {
-		playerMsg.HostIP = &hostIP
+	if hostID != "" {
+		playerMsg.HostID = &hostID
 	}
 
 	if gameMode != "" {
@@ -152,7 +150,7 @@ func registerPlayer(ctx context.Context, ch *amqp091.Channel, queueName string) 
 		log.Fatalf("Failed to marshal player message: %v", err)
 	}
 
-	err = ch.PublishWithContext(
+	if err := ch.PublishWithContext(
 		ctx,
 		"",        // exchange
 		queueName, // routing key
@@ -163,15 +161,14 @@ func registerPlayer(ctx context.Context, ch *amqp091.Channel, queueName string) 
 			Type:        "match_request",
 			Body:        msgBody,
 		},
-	)
-	if err != nil {
+	); err != nil {
 		log.Fatalf("Failed to publish message: %v", err)
 	}
 
 	fmt.Printf("\nPlayer registration sent successfully!\n")
 	fmt.Printf("Player ID: %s\n", playerID)
-	if playerMsg.HostIP != nil {
-		fmt.Printf("Requested Host: %s\n", *playerMsg.HostIP)
+	if playerMsg.HostID != nil {
+		fmt.Printf("Requested Host: %s\n", *playerMsg.HostID)
 	}
 	if playerMsg.Mode != nil {
 		fmt.Printf("Preferred Game Mode: %s\n", string(*playerMsg.Mode))

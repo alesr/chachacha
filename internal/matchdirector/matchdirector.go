@@ -98,17 +98,17 @@ func (md *MatchDirector) matchPlayers() error {
 		host := &hosts[i]
 
 		// Get or create a session for this host
-		session, exists := sessionsByHost[host.HostIP]
+		session, exists := sessionsByHost[host.HostID]
 		if !exists {
 			session = &sessionrepo.Session{
 				ID:             ulid.Make().String(),
-				HostIP:         host.HostIP,
+				HostIP:         host.HostID,
 				Mode:           host.Mode,
 				CreatedAt:      time.Now(),
 				Players:        []string{},
 				AvailableSlots: host.AvailableSlots,
 			}
-			sessionsByHost[host.HostIP] = session
+			sessionsByHost[host.HostID] = session
 		}
 
 		// First, match players that specifically requested this host
@@ -119,12 +119,12 @@ func (md *MatchDirector) matchPlayers() error {
 			}
 
 			// Check if player specified this host IP
-			if player.HostIP != nil && *player.HostIP == host.HostIP {
+			if player.HostID != nil && *player.HostID == host.HostID {
 				// Check if host has available slots
 				if session.AvailableSlots <= 0 {
 					md.logger.Debug(
 						"Host has no available slots for player",
-						slog.String("host_ip", host.HostIP),
+						slog.String("host_ip", host.HostID),
 						slog.String("player_id", player.PlayerID),
 					)
 					continue
@@ -134,7 +134,7 @@ func (md *MatchDirector) matchPlayers() error {
 				if player.Mode != nil && *player.Mode != host.Mode {
 					md.logger.Info(
 						"Game mode mismatch for player and host",
-						slog.String("player_id", player.PlayerID), slog.String("host_ip", host.HostIP),
+						slog.String("player_id", player.PlayerID), slog.String("host_ip", host.HostID),
 						slog.String("player_mode", string(*player.Mode)),
 						slog.String("host_mode", string(host.Mode)),
 					)
@@ -145,7 +145,7 @@ func (md *MatchDirector) matchPlayers() error {
 				md.logger.Debug(
 					"Matched player with specific host request for game mode",
 					slog.String("player_id", player.PlayerID),
-					slog.String("host_ip", host.HostIP),
+					slog.String("host_ip", host.HostID),
 					slog.String("host_mode", string(host.Mode)),
 				)
 
@@ -160,7 +160,7 @@ func (md *MatchDirector) matchPlayers() error {
 	// Second pass: Match remaining players with any compatible host
 	for i := range hosts {
 		host := &hosts[i]
-		session := sessionsByHost[host.HostIP]
+		session := sessionsByHost[host.HostID]
 
 		// Skip hosts with no available slots
 		if session.AvailableSlots <= 0 {
@@ -174,7 +174,7 @@ func (md *MatchDirector) matchPlayers() error {
 			}
 
 			// Skip players who specified a different host
-			if player.HostIP != nil && *player.HostIP != host.HostIP {
+			if player.HostID != nil && *player.HostID != host.HostID {
 				continue
 			}
 
@@ -187,7 +187,7 @@ func (md *MatchDirector) matchPlayers() error {
 			md.logger.Debug(
 				"Matched player with compatible host request for game mode",
 				slog.String("player_id", player.PlayerID),
-				slog.String("host_ip", host.HostIP),
+				slog.String("host_ip", host.HostID),
 				slog.String("host_mode", string(host.Mode)),
 			)
 

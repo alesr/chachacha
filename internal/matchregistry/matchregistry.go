@@ -86,7 +86,7 @@ func (mr *MatchRegistry) Start() error {
 				if err := mr.registerHost(hostMsg); err != nil {
 					mr.logger.Error("Error processing host registration", slog.String("error", err.Error()))
 				} else {
-					mr.logger.Debug("Host registered successfully", slog.String("host_ip", hostMsg.HostIP))
+					mr.logger.Debug("Host registered successfully", slog.String("host_ip", hostMsg.HostID))
 				}
 
 			case "match_request":
@@ -124,7 +124,7 @@ func (mr *MatchRegistry) tryDetectAndProcessMessage(msgBody []byte) error {
 	var hostMsg game.HostRegistratioMessage
 	if err := json.Unmarshal(msgBody, &hostMsg); err == nil {
 		// If it has a HostIP and Mode, it's a host registration
-		if hostMsg.HostIP != "" && hostMsg.Mode != "" {
+		if hostMsg.HostID != "" && hostMsg.Mode != "" {
 			return mr.registerHost(hostMsg)
 		}
 	}
