@@ -147,6 +147,25 @@ func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
 	if err := mr.repo.StoreHost(ctx, msg); err != nil {
 		return fmt.Errorf("could not store host game message: %w", err)
 	}
+
+	event := pubevents.GameCreatedEvent{
+		GameID:     msg.HostID, // Using host ID as game ID
+		HostID:     msg.HostID,
+		MaxPlayers: int8(msg.AvailableSlots),
+		GameMode:   string(msg.Mode),
+		CreatedAt:  time.Now(),
+	}
+
+	if err := mr.publisher.PublishGameCreated(ctx, event); err != nil {
+		mr.logger.Error("Failed to publish game created event",
+			slog.String("error", err.Error()),
+			slog.String("host_id", msg.HostID))
+		// Continue despite publishing error
+	} else {
+		mr.logger.Debug("Published game created event",
+			slog.String("host_id", msg.HostID),
+			slog.String("game_mode", string(msg.Mode)))
+	}
 	return nil
 }
 
@@ -156,6 +175,34 @@ func (mr *MatchRegistry) registerPlayer(msg game.MatchRequestMessage) error {
 
 	if err := mr.repo.StorePlayer(ctx, msg); err != nil {
 		return fmt.Errorf("could not store join game message: %w", err)
+	}
+
+	var hostID string
+	if msg.HostID != nil {
+		hostID = *msg.HostID
+	}
+
+	var gameMode string
+	if msg.Mode != nil {
+		gameMode = string(*msg.Mode)
+	}
+
+	event := pubevents.PlayerJoinRequestedEvent{
+		PlayerID:  msg.PlayerID,
+		HostID:    &hostID,
+		GameMode:  &gameMode,
+		CreatedAt: time.Now(),
+	}
+
+	if err := mr.publisher.PublishPlayerJoinRequestedEvent(ctx, event); err != nil {
+		mr.logger.Error("Failed to player join requested event",
+			slog.String("error", err.Error()),
+			slog.String("host_id", hostID))
+		// Continue despite publishing error
+	} else {
+		mr.logger.Debug("Published player join requested event",
+			slog.String("host_id", hostID),
+			slog.String("game_mode", gameMode))
 	}
 	return nil
 }
