@@ -1,0 +1,19 @@
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN go build -o lobby ./cmd/lobby
+RUN go build -o matcher ./cmd/matcher
+
+FROM alpine:latest
+
+WORKDIR /app
+COPY --from=builder /app/lobby .
+COPY --from=builder /app/matcher .
+COPY test/manual/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

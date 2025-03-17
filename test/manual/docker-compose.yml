@@ -1,0 +1,73 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672" # AMQP port for Go app
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  lobby:
+    build:
+      context: ../../
+      dockerfile: test/manual/Dockerfile.test
+    command: ["lobby"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      REDIS_ADDR: redis:6379
+      QUEUE_NAME: matchmaking_queue
+      LOG_LEVEL: debug
+    restart: on-failure
+
+  matcher:
+    build:
+      context: ../../
+      dockerfile: test/manual/Dockerfile.test
+    command: ["matcher"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      REDIS_ADDR: redis:6379
+      QUEUE_NAME: matchmaking_queue
+      MATCH_INTERVAL: 2s
+      LOG_LEVEL: debug
+    restart: on-failure
+
+  test-client:
+    build:
+      context: ../../
+      dockerfile: test/manual/Dockerfile.testclient
+    depends_on:
+      - rabbitmq
+      - redis
+      - lobby
+      - matcher
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      REDIS_ADDR: redis:6379
+      QUEUE_NAME: matchmaking_queue
