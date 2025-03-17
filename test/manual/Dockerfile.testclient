@@ -11,5 +11,8 @@ FROM alpine:latest
 
 WORKDIR /app
 COPY --from=builder /app/test-client .
+RUN echo "#!/bin/sh" > /entrypoint.sh && \
+    echo "tail -f /dev/null" >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
-ENTRYPOINT ["/app/test-client"]
+ENTRYPOINT ["/entrypoint.sh"]
