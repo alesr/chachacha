@@ -15,18 +15,18 @@ import (
 
 const defaultCtxTimeout = time.Second * 5
 
+type repository interface {
+	StoreHost(ctx context.Context, host game.HostRegistratioMessage) error
+	StorePlayer(ctx context.Context, player game.MatchRequestMessage) error
+}
+
 type consumer interface {
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp091.Table) (<-chan amqp091.Delivery, error)
 }
 
 type publisher interface {
 	PublishGameCreated(ctx context.Context, event pubevents.GameCreatedEvent) error
-	PublishPlayerJoinRequestedEvent(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
-}
-
-type repository interface {
-	StoreHost(ctx context.Context, host game.HostRegistratioMessage) error
-	StorePlayer(ctx context.Context, player game.MatchRequestMessage) error
+	PublishPlayerJoinRequested(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
 }
 
 type MatchRegistry struct {
@@ -35,6 +35,8 @@ type MatchRegistry struct {
 	consumerQueueName string
 	consumer          consumer
 	publisher         publisher
+	ctx               context.Context
+	cancel            context.CancelFunc
 }
 
 func New(
@@ -44,12 +46,15 @@ func New(
 	consumer consumer,
 	publisher publisher,
 ) *MatchRegistry {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &MatchRegistry{
 		logger:            logger.WithGroup("match_registry"),
 		repo:              repo,
 		consumerQueueName: consumerQueueName,
 		consumer:          consumer,
 		publisher:         publisher,
+		ctx:               ctx,
+		cancel:            cancel,
 	}
 }
 
@@ -67,55 +72,73 @@ func (mr *MatchRegistry) Start() error {
 		return fmt.Errorf("could not register consumer for queue '%s': %w", mr.consumerQueueName, err)
 	}
 
-	forever := make(chan bool)
-
 	go func() {
-		for d := range msgs {
-			mr.logger.Debug("Received a message", slog.String("body", string(d.Body)))
-
-			messageType := d.Type
-
-			switch messageType {
-			case "host_registration":
-				var hostMsg game.HostRegistratioMessage
-				if err := json.Unmarshal(d.Body, &hostMsg); err != nil {
-					mr.logger.Error("Error unmarshaling host registration message", slog.String("error", err.Error()))
-					continue
+		for {
+			select {
+			case d, ok := <-msgs:
+				if !ok {
+					// Channel was closed
+					mr.logger.Info("Message channel was closed, shutting down")
+					return
 				}
 
-				if err := mr.registerHost(hostMsg); err != nil {
-					mr.logger.Error("Error processing host registration", slog.String("error", err.Error()))
-				} else {
-					mr.logger.Debug("Host registered successfully", slog.String("host_ip", hostMsg.HostID))
+				mr.logger.Debug("Received a message", slog.String("body", string(d.Body)))
+
+				messageType := d.Type
+
+				switch messageType {
+				case pubevents.MsgTypeHostRegistration:
+					var hostMsg game.HostRegistratioMessage
+					if err := json.Unmarshal(d.Body, &hostMsg); err != nil {
+						mr.logger.Error("Error unmarshaling host registration message", slog.String("error", err.Error()))
+						continue
+					}
+
+					if err := mr.registerHost(hostMsg); err != nil {
+						mr.logger.Error("Error processing host registration", slog.String("error", err.Error()))
+					} else {
+						mr.logger.Debug("Host registered successfully", slog.String("host_ip", hostMsg.HostID))
+					}
+
+				case pubevents.MsgTypeMatchRequest:
+					var playerMsg game.MatchRequestMessage
+					if err := json.Unmarshal(d.Body, &playerMsg); err != nil {
+						mr.logger.Error("Error unmarshaling match request message", slog.String("error", err.Error()))
+						continue
+					}
+					if err := mr.registerPlayer(playerMsg); err != nil {
+						mr.logger.Error("Error processing match request", slog.String("error", err.Error()))
+					} else {
+						mr.logger.Debug("Player match request registered", slog.String("player_id", playerMsg.PlayerID))
+					}
+
+				default:
+					mr.logger.Error("Unknown message type received", slog.String("message_type", messageType))
+
+					// Try to detect message type from content
+					if err := mr.tryDetectAndProcessMessage(d.Body); err != nil {
+						mr.logger.Error("Failed to process message", slog.String("error", err.Error()))
+					}
 				}
 
-			case "match_request":
-				var playerMsg game.MatchRequestMessage
-				if err := json.Unmarshal(d.Body, &playerMsg); err != nil {
-					mr.logger.Error("Error unmarshaling match request message", slog.String("error", err.Error()))
-					continue
-				}
-				if err := mr.registerPlayer(playerMsg); err != nil {
-					mr.logger.Error("Error processing match request", slog.String("error", err.Error()))
-				} else {
-					mr.logger.Debug("Player match request registered", slog.String("player_id", playerMsg.PlayerID))
-				}
-
-			default:
-				mr.logger.Error("Unknown message type received", slog.String("message_type", messageType))
-
-				// Try to detect message type from content
-				if err := mr.tryDetectAndProcessMessage(d.Body); err != nil {
-					mr.logger.Error("Failed to process message", slog.String("error", err.Error()))
-				}
+			case <-mr.ctx.Done():
+				// Context was cancelled, time to exit
+				mr.logger.Info("Context cancelled, shutting down match registry")
+				return
 			}
 		}
 	}()
 
-	mr.logger.Info("Waiting for messages")
-	<-forever
+	mr.logger.Info("Match registry started, waiting for messages")
 
+	// Wait until context is cancelled
+	<-mr.ctx.Done()
+	mr.logger.Info("Match registry shutdown complete")
 	return nil
+}
+
+func (mr *MatchRegistry) Shutdown() {
+	mr.cancel()
 }
 
 // tryDetectAndProcessMessage attempts to determine message type from its content
@@ -194,15 +217,19 @@ func (mr *MatchRegistry) registerPlayer(msg game.MatchRequestMessage) error {
 		CreatedAt: time.Now(),
 	}
 
-	if err := mr.publisher.PublishPlayerJoinRequestedEvent(ctx, event); err != nil {
-		mr.logger.Error("Failed to player join requested event",
+	if err := mr.publisher.PublishPlayerJoinRequested(ctx, event); err != nil {
+		mr.logger.Error(
+			"Failed to player join requested event",
 			slog.String("error", err.Error()),
-			slog.String("host_id", hostID))
+			slog.String("host_id", hostID),
+		)
 		// Continue despite publishing error
 	} else {
-		mr.logger.Debug("Published player join requested event",
+		mr.logger.Debug(
+			"Published player join requested event",
 			slog.String("host_id", hostID),
-			slog.String("game_mode", gameMode))
+			slog.String("game_mode", gameMode),
+		)
 	}
 	return nil
 }

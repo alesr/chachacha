@@ -47,8 +47,8 @@ func (p *Publisher) PublishGameCreated(ctx context.Context, event pubevents.Game
 	return p.publishEvent(ctx, pubevents.ExchangeGameCreated, event)
 }
 
-// PublishPlayerJoinRequestedEvent publishes a player wanting to join a match event.
-func (p *Publisher) PublishPlayerJoinRequestedEvent(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+// PublishPlayerJoinRequested publishes a player wanting to join a match event.
+func (p *Publisher) PublishPlayerJoinRequested(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
 	return p.publishEvent(ctx, pubevents.ExchangePlayerJoinRequested, event)
 }
 
@@ -78,7 +78,7 @@ func (p *Publisher) publishEvent(ctx context.Context, exchange string, event int
 		false, // mandatory
 		false, // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
+			ContentType: pubevents.ContentType,
 			Body:        data,
 		},
 	); err != nil {

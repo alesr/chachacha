@@ -13,6 +13,7 @@ import (
 	"github.com/alesr/chachacha/internal/matchdirector"
 	"github.com/alesr/chachacha/internal/matchregistry"
 	"github.com/alesr/chachacha/internal/sessionrepo"
+	pubevents "github.com/alesr/chachacha/pkg/events"
 	"github.com/alesr/chachacha/pkg/game"
 	"github.com/oklog/ulid/v2"
 	"github.com/rabbitmq/amqp091-go"
@@ -122,8 +123,8 @@ func testHostRegistration(t *testing.T, ch *amqp091.Channel, queueName string) {
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	)
@@ -156,8 +157,8 @@ func testPlayerRegistration(t *testing.T, ch *amqp091.Channel, queueName string)
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "match_request",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeMatchRequest,
 			Body:        msgBody,
 		},
 	)
@@ -191,8 +192,8 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	)
@@ -220,8 +221,8 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 			false,     // mandatory
 			false,     // immediate
 			amqp091.Publishing{
-				ContentType: "application/json",
-				Type:        "match_request",
+				ContentType: pubevents.ContentType,
+				Type:        pubevents.MsgTypeMatchRequest,
 				Body:        msgBody,
 			},
 		)
@@ -282,8 +283,8 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	)
@@ -310,8 +311,8 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 			false,     // mandatory
 			false,     // immediate
 			amqp091.Publishing{
-				ContentType: "application/json",
-				Type:        "match_request",
+				ContentType: pubevents.ContentType,
+				Type:        pubevents.MsgTypeMatchRequest,
 				Body:        msgBody,
 			},
 		)
@@ -362,8 +363,8 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	)
@@ -388,8 +389,8 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 		false,     // mandatory
 		false,     // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevents.ContentType,
+			Type:        pubevents.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	)
@@ -418,8 +419,8 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 			false,     // mandatory
 			false,     // immediate
 			amqp091.Publishing{
-				ContentType: "application/json",
-				Type:        "match_request",
+				ContentType: pubevents.ContentType,
+				Type:        pubevents.MsgTypeMatchRequest,
 				Body:        msgBody,
 			},
 		)
@@ -445,8 +446,8 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 			false,     // mandatory
 			false,     // immediate
 			amqp091.Publishing{
-				ContentType: "application/json",
-				Type:        "match_request",
+				ContentType: pubevents.ContentType,
+				Type:        pubevents.MsgTypeMatchRequest,
 				Body:        msgBody,
 			},
 		)

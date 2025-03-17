@@ -3,11 +3,15 @@ package events
 import "time"
 
 const (
-	// Topics for different event types
-
+	// Exchanges for different event types
 	ExchangeGameCreated         = "game.created"
 	ExchangePlayerJoinRequested = "game.player.join.requested"
 	ExchangePlayerJoined        = "game.player.joined"
+
+	MsgTypeHostRegistration = "host_registration"
+	MsgTypeMatchRequest     = "match_request"
+
+	ContentType = "application/json"
 )
 
 // GameCreatedEvent represents a new game creation event.
