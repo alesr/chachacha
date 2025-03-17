@@ -143,22 +143,28 @@ func (mr *MatchRegistry) Shutdown() {
 
 // tryDetectAndProcessMessage attempts to determine message type from its content
 func (mr *MatchRegistry) tryDetectAndProcessMessage(msgBody []byte) error {
-	// Try parsing as host registration first
-	var hostMsg game.HostRegistratioMessage
-	if err := json.Unmarshal(msgBody, &hostMsg); err == nil {
-		// If it has a HostIP and Mode, it's a host registration
-		if hostMsg.HostID != "" && hostMsg.Mode != "" {
-			return mr.registerHost(hostMsg)
-		}
+	// First, try to parse as a generic JSON object to check message fields
+	var msg map[string]any
+	if err := json.Unmarshal(msgBody, &msg); err != nil {
+		return fmt.Errorf("could not parse message: %w", err)
 	}
 
-	// Try parsing as player match request
-	var playerMsg game.MatchRequestMessage
-	if err := json.Unmarshal(msgBody, &playerMsg); err == nil {
-		// If it has a PlayerID, it's a match request
-		if playerMsg.PlayerID != "" {
-			return mr.registerPlayer(playerMsg)
+	// Check if it has the PlayerID field, which would indicate a match request
+	if _, hasPlayerID := msg["player_id"]; hasPlayerID {
+		var playerMsg game.MatchRequestMessage
+		if err := json.Unmarshal(msgBody, &playerMsg); err != nil {
+			return fmt.Errorf("could not parse as match request: %w", err)
 		}
+		return mr.registerPlayer(playerMsg)
+	}
+
+	// Otherwise, try as host registration
+	if _, hasHostID := msg["host_id"]; hasHostID {
+		var hostMsg game.HostRegistratioMessage
+		if err := json.Unmarshal(msgBody, &hostMsg); err != nil {
+			return fmt.Errorf("could not parse as host registration: %w", err)
+		}
+		return mr.registerHost(hostMsg)
 	}
 	return errors.New("could not determine message type")
 }
@@ -180,14 +186,18 @@ func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
 	}
 
 	if err := mr.publisher.PublishGameCreated(ctx, event); err != nil {
-		mr.logger.Error("Failed to publish game created event",
+		mr.logger.Error(
+			"Failed to publish game created event",
 			slog.String("error", err.Error()),
-			slog.String("host_id", msg.HostID))
+			slog.String("host_id", msg.HostID),
+		)
 		// Continue despite publishing error
 	} else {
-		mr.logger.Debug("Published game created event",
+		mr.logger.Debug(
+			"Published game created event",
 			slog.String("host_id", msg.HostID),
-			slog.String("game_mode", string(msg.Mode)))
+			slog.String("game_mode", string(msg.Mode)),
+		)
 	}
 	return nil
 }
