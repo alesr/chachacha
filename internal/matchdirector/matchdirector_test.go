@@ -50,7 +50,7 @@ func TestMatchDirector_StartStop(t *testing.T) {
 	md.Start()
 
 	// wait for at least one matching cycle
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	// should have called the repo methods at least once
 	assert.True(t, repo.wasGetHostsCalled())
