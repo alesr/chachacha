@@ -4,8 +4,7 @@ import (
 	"context"
 	"sync"
 
-	pubevents "github.com/alesr/chachacha/pkg/events"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/rabbitmq/amqp091-go"
 )
 
@@ -15,11 +14,11 @@ type repoMock struct {
 	mu                sync.Mutex
 	storeHostCalled   bool
 	storePlayerCalled bool
-	storeHostFunc     func(ctx context.Context, host game.HostRegistratioMessage) error
-	storePlayerFunc   func(ctx context.Context, player game.MatchRequestMessage) error
+	storeHostFunc     func(ctx context.Context, host pubevts.HostRegistratioEvent) error
+	storePlayerFunc   func(ctx context.Context, player pubevts.MatchRequestEvent) error
 }
 
-func (m *repoMock) StoreHost(ctx context.Context, host game.HostRegistratioMessage) error {
+func (m *repoMock) StoreHost(ctx context.Context, host pubevts.HostRegistratioEvent) error {
 	if m.storeHostFunc != nil {
 		m.mu.Lock()
 		m.storeHostCalled = true
@@ -29,7 +28,7 @@ func (m *repoMock) StoreHost(ctx context.Context, host game.HostRegistratioMessa
 	return nil
 }
 
-func (m *repoMock) StorePlayer(ctx context.Context, player game.MatchRequestMessage) error {
+func (m *repoMock) StorePlayer(ctx context.Context, player pubevts.MatchRequestEvent) error {
 	if m.storePlayerFunc != nil {
 		m.mu.Lock()
 		m.storePlayerCalled = true
@@ -67,11 +66,11 @@ type publisherMock struct {
 	mu                               sync.Mutex
 	publishGameCreatedCalled         bool
 	publishPlayerJoinRequestedCalled bool
-	publishGameCreatedFunc           func(ctx context.Context, event pubevents.GameCreatedEvent) error
-	publishPlayerJoinRequestedFunc   func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
+	publishGameCreatedFunc           func(ctx context.Context, event pubevts.GameCreatedEvent) error
+	publishPlayerJoinRequestedFunc   func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error
 }
 
-func (m *publisherMock) PublishGameCreated(ctx context.Context, event pubevents.GameCreatedEvent) error {
+func (m *publisherMock) PublishGameCreated(ctx context.Context, event pubevts.GameCreatedEvent) error {
 	if m.publishGameCreatedFunc != nil {
 		m.mu.Lock()
 		m.publishGameCreatedCalled = true
@@ -81,7 +80,7 @@ func (m *publisherMock) PublishGameCreated(ctx context.Context, event pubevents.
 	return nil
 }
 
-func (m *publisherMock) PublishPlayerJoinRequested(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+func (m *publisherMock) PublishPlayerJoinRequested(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 	if m.publishPlayerJoinRequestedFunc != nil {
 		m.mu.Lock()
 		m.publishPlayerJoinRequestedCalled = true

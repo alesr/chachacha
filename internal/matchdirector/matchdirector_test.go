@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/alesr/chachacha/internal/sessionrepo"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/alesr/chachacha/pkg/logutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,11 +36,11 @@ func TestMatchDirector_StartStop(t *testing.T) {
 	logger := logutils.NewNoop()
 
 	repo := repoMock{
-		getHostsFunc: func(ctx context.Context) ([]game.HostRegistratioMessage, error) {
-			return []game.HostRegistratioMessage{}, nil
+		getHostsFunc: func(ctx context.Context) ([]pubevts.HostRegistratioEvent, error) {
+			return []pubevts.HostRegistratioEvent{}, nil
 		},
-		getPlayersFunc: func(ctx context.Context) ([]game.MatchRequestMessage, error) {
-			return []game.MatchRequestMessage{}, nil
+		getPlayersFunc: func(ctx context.Context) ([]pubevts.MatchRequestEvent, error) {
+			return []pubevts.MatchRequestEvent{}, nil
 		},
 	}
 
@@ -50,7 +50,7 @@ func TestMatchDirector_StartStop(t *testing.T) {
 	md.Start()
 
 	// wait for at least one matching cycle
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 3)
 
 	// should have called the repo methods at least once
 	assert.True(t, repo.wasGetHostsCalled())
@@ -68,59 +68,59 @@ func TestMatchDirector_StartStop(t *testing.T) {
 func TestMatchDirector_matchPlayers(t *testing.T) {
 	t.Parallel()
 
-	dmMode := game.GameMode("deathmatch")
-	ctfMode := game.GameMode("capture-flag")
+	dmMode := pubevts.GameMode("deathmatch")
+	ctfMode := pubevts.GameMode("capture-flag")
 
-	host1 := game.HostRegistratioMessage{
+	host1 := pubevts.HostRegistratioEvent{
 		HostID:         "host1",
 		Mode:           dmMode,
 		AvailableSlots: 2,
 	}
 
-	host2 := game.HostRegistratioMessage{
+	host2 := pubevts.HostRegistratioEvent{
 		HostID:         "host2",
 		Mode:           ctfMode,
 		AvailableSlots: 3,
 	}
 
 	// player wanting specific host and mode
-	player1 := game.MatchRequestMessage{
+	player1 := pubevts.MatchRequestEvent{
 		PlayerID: "player1",
 		HostID:   stringToPtr("host1"),
 		Mode:     &dmMode,
 	}
 
 	// player wanting any host with specific mode
-	player2 := game.MatchRequestMessage{
+	player2 := pubevts.MatchRequestEvent{
 		PlayerID: "player2",
 		Mode:     &dmMode,
 	}
 
 	// player wanting specific host with no mode preference
-	player3 := game.MatchRequestMessage{
+	player3 := pubevts.MatchRequestEvent{
 		PlayerID: "player3",
 		HostID:   stringToPtr("host2"),
 	}
 
 	// player with no preferences
-	player4 := game.MatchRequestMessage{
+	player4 := pubevts.MatchRequestEvent{
 		PlayerID: "player4",
 	}
 
 	// player requesting ctf mode
-	player5 := game.MatchRequestMessage{
+	player5 := pubevts.MatchRequestEvent{
 		PlayerID: "player5",
 		Mode:     &ctfMode,
 	}
 
 	// player with invalid host specification
-	player6 := game.MatchRequestMessage{
+	player6 := pubevts.MatchRequestEvent{
 		PlayerID: "player6",
 		HostID:   stringToPtr("non-existent-host"),
 	}
 
 	// player with incompatible mode for host
-	player7 := game.MatchRequestMessage{
+	player7 := pubevts.MatchRequestEvent{
 		PlayerID: "player7",
 		HostID:   stringToPtr("host1"),
 		Mode:     &ctfMode, // host1 offers deathmatch
@@ -128,8 +128,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		givenHosts            []game.HostRegistratioMessage
-		givenPlayers          []game.MatchRequestMessage
+		givenHosts            []pubevts.HostRegistratioEvent
+		givenPlayers          []pubevts.MatchRequestEvent
 		expectError           bool
 		expectSessionsCreated int
 		expectRemovedPlayers  []string
@@ -137,8 +137,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 	}{
 		{
 			name:                  "no hosts available",
-			givenHosts:            []game.HostRegistratioMessage{},
-			givenPlayers:          []game.MatchRequestMessage{player1, player2},
+			givenHosts:            []pubevts.HostRegistratioEvent{},
+			givenPlayers:          []pubevts.MatchRequestEvent{player1, player2},
 			expectError:           false, // no error, just no matches
 			expectSessionsCreated: 0,
 			expectRemovedPlayers:  []string{},
@@ -146,8 +146,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "no players available",
-			givenHosts:            []game.HostRegistratioMessage{host1, host2},
-			givenPlayers:          []game.MatchRequestMessage{},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1, host2},
+			givenPlayers:          []pubevts.MatchRequestEvent{},
 			expectError:           false, // no error, just no matches
 			expectSessionsCreated: 0,
 			expectRemovedPlayers:  []string{},
@@ -155,8 +155,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "match player with specific host and mode",
-			givenHosts:            []game.HostRegistratioMessage{host1},
-			givenPlayers:          []game.MatchRequestMessage{player1},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1},
+			givenPlayers:          []pubevts.MatchRequestEvent{player1},
 			expectError:           false,
 			expectSessionsCreated: 1,
 			expectRemovedPlayers:  []string{"player1"},
@@ -172,8 +172,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "match player with any host but specific mode",
-			givenHosts:            []game.HostRegistratioMessage{host1, host2},
-			givenPlayers:          []game.MatchRequestMessage{player2, player5},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1, host2},
+			givenPlayers:          []pubevts.MatchRequestEvent{player2, player5},
 			expectError:           false,
 			expectSessionsCreated: 2,
 			expectRemovedPlayers:  []string{"player2", "player5"},
@@ -194,8 +194,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "match multiple players to single host",
-			givenHosts:            []game.HostRegistratioMessage{host1},
-			givenPlayers:          []game.MatchRequestMessage{player1, player2},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1},
+			givenPlayers:          []pubevts.MatchRequestEvent{player1, player2},
 			expectError:           false,
 			expectSessionsCreated: 1,
 			expectRemovedPlayers:  []string{"player1", "player2"},
@@ -210,8 +210,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "player with invalid host not matched",
-			givenHosts:            []game.HostRegistratioMessage{host1, host2},
-			givenPlayers:          []game.MatchRequestMessage{player6},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1, host2},
+			givenPlayers:          []pubevts.MatchRequestEvent{player6},
 			expectError:           false,
 			expectSessionsCreated: 0, // No matches should be found
 			expectRemovedPlayers:  []string{},
@@ -219,8 +219,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "player with incompatible mode not matched",
-			givenHosts:            []game.HostRegistratioMessage{host1},
-			givenPlayers:          []game.MatchRequestMessage{player7},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1},
+			givenPlayers:          []pubevts.MatchRequestEvent{player7},
 			expectError:           false,
 			expectSessionsCreated: 0, // No matches should be found
 			expectRemovedPlayers:  []string{},
@@ -228,8 +228,8 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 		},
 		{
 			name:                  "complex scenario with multiple hosts and players",
-			givenHosts:            []game.HostRegistratioMessage{host1, host2},
-			givenPlayers:          []game.MatchRequestMessage{player1, player2, player3, player4, player5, player6, player7},
+			givenHosts:            []pubevts.HostRegistratioEvent{host1, host2},
+			givenPlayers:          []pubevts.MatchRequestEvent{player1, player2, player3, player4, player5, player6, player7},
 			expectError:           false,
 			expectSessionsCreated: 2,
 			// player1, player2 to host1; player3, player4, player5 to host2; player6, player7 not matched
@@ -262,10 +262,10 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 			storedSessions := make([]*sessionrepo.Session, 0)
 
 			repo := &repoMock{
-				getHostsFunc: func(ctx context.Context) ([]game.HostRegistratioMessage, error) {
+				getHostsFunc: func(ctx context.Context) ([]pubevts.HostRegistratioEvent, error) {
 					return tc.givenHosts, nil
 				},
-				getPlayersFunc: func(ctx context.Context) ([]game.MatchRequestMessage, error) {
+				getPlayersFunc: func(ctx context.Context) ([]pubevts.MatchRequestEvent, error) {
 					return tc.givenPlayers, nil
 				},
 				storeGameSessionFunc: func(ctx context.Context, session *sessionrepo.Session) error {
@@ -282,7 +282,7 @@ func TestMatchDirector_matchPlayers(t *testing.T) {
 					storedSessions = append(storedSessions, sessionCopy)
 					return nil
 				},
-				updateHostAvailableSlotsFunc: func(ctx context.Context, hostIP string, slots int8) error {
+				updateHostAvailableSlotsFunc: func(ctx context.Context, hostIP string, slots uint16) error {
 					return nil
 				},
 				removePlayerFunc: func(ctx context.Context, playerID string) error {

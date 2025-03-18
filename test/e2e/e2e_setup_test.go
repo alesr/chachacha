@@ -88,7 +88,6 @@ func setupRabbitMQChannel(t *testing.T, rabbitmqAddr string) (*amqp091.Connectio
 
 	ch, err := conn.Channel()
 	require.NoError(t, err)
-
 	return conn, ch
 }
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	pubevents "github.com/alesr/chachacha/pkg/events"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/rabbitmq/amqp091-go"
 )
 
@@ -14,9 +14,10 @@ const defaultTimeout = 5 * time.Second
 
 // Declare the exchanges we'll use.
 var exchanges = []string{
-	pubevents.ExchangeGameCreated,
-	pubevents.ExchangePlayerJoinRequested,
-	pubevents.ExchangePlayerJoined,
+	pubevts.ExchangeMatchRequest,
+	pubevts.ExchangeGameCreated,
+	pubevts.ExchangePlayerJoinRequested,
+	pubevts.ExchangePlayerJoined,
 }
 
 // Publisher handles publishing events to RabbitMQ.
@@ -29,8 +30,8 @@ func NewPublisher(ch *amqp091.Channel) (*Publisher, error) {
 	for _, exchange := range exchanges {
 		if err := ch.ExchangeDeclare(
 			exchange, // name
-			"fanout", // type
-			true,     // durable
+			"direct", // type
+			false,    // durable
 			false,    // auto-deleted
 			false,    // internal
 			false,    // no-wait
@@ -43,18 +44,18 @@ func NewPublisher(ch *amqp091.Channel) (*Publisher, error) {
 }
 
 // PublishGameCreated publishes a game created event.
-func (p *Publisher) PublishGameCreated(ctx context.Context, event pubevents.GameCreatedEvent) error {
-	return p.publishEvent(ctx, pubevents.ExchangeGameCreated, event)
+func (p *Publisher) PublishGameCreated(ctx context.Context, event pubevts.GameCreatedEvent) error {
+	return p.publishEvent(ctx, pubevts.ExchangeGameCreated, event)
 }
 
 // PublishPlayerJoinRequested publishes a player wanting to join a match event.
-func (p *Publisher) PublishPlayerJoinRequested(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
-	return p.publishEvent(ctx, pubevents.ExchangePlayerJoinRequested, event)
+func (p *Publisher) PublishPlayerJoinRequested(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
+	return p.publishEvent(ctx, pubevts.ExchangePlayerJoinRequested, event)
 }
 
 // PublishPlayerJoined publishes a player joined event.
-func (p *Publisher) PublishPlayerJoined(ctx context.Context, event pubevents.PlayerJoinedEvent) error {
-	return p.publishEvent(ctx, pubevents.ExchangePlayerJoined, event)
+func (p *Publisher) PublishPlayerJoined(ctx context.Context, event pubevts.PlayerJoinedEvent) error {
+	return p.publishEvent(ctx, pubevts.ExchangePlayerJoined, event)
 }
 
 // publishEvent publishes an event to a specific exchange.
@@ -78,7 +79,7 @@ func (p *Publisher) publishEvent(ctx context.Context, exchange string, event int
 		false, // mandatory
 		false, // immediate
 		amqp091.Publishing{
-			ContentType: pubevents.ContentType,
+			ContentType: pubevts.ContentType,
 			Body:        data,
 		},
 	); err != nil {

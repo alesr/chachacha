@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -32,12 +32,12 @@ type redisClient interface {
 }
 
 type Session struct {
-	ID             string        `json:"session_id"`
-	HostID         string        `json:"host_id"`
-	Mode           game.GameMode `json:"mode"`
-	CreatedAt      time.Time     `json:"created_at"`
-	Players        []string      `json:"players"`
-	AvailableSlots int8          `json:"available_slots"`
+	ID             string           `json:"session_id"`
+	HostID         string           `json:"host_id"`
+	Mode           pubevts.GameMode `json:"mode"`
+	CreatedAt      time.Time        `json:"created_at"`
+	Players        []string         `json:"players"`
+	AvailableSlots uint16           `json:"available_slots"`
 }
 
 type Redis struct {
@@ -48,7 +48,7 @@ func NewRedisRepo(redisCli redisClient) (*Redis, error) {
 	return &Redis{client: redisCli}, nil
 }
 
-func (s *Redis) StoreHost(ctx context.Context, host game.HostRegistratioMessage) error {
+func (s *Redis) StoreHost(ctx context.Context, host pubevts.HostRegistratioEvent) error {
 	key := hostKeyPrefix + host.HostID
 
 	data, err := json.Marshal(host)
@@ -66,7 +66,7 @@ func (s *Redis) StoreHost(ctx context.Context, host game.HostRegistratioMessage)
 	return nil
 }
 
-func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots int8) error {
+func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots uint16) error {
 	key := hostKeyPrefix + hostIP
 
 	// Get the current host data
@@ -75,7 +75,7 @@ func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slo
 		return fmt.Errorf("could not get host data for updating: %w", err)
 	}
 
-	var host game.HostRegistratioMessage
+	var host pubevts.HostRegistratioEvent
 	if err := json.Unmarshal(data, &host); err != nil {
 		return fmt.Errorf("could not unmarshal host data: %w", err)
 	}
@@ -93,7 +93,7 @@ func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slo
 	return nil
 }
 
-func (s *Redis) StorePlayer(ctx context.Context, player game.MatchRequestMessage) error {
+func (s *Redis) StorePlayer(ctx context.Context, player pubevts.MatchRequestEvent) error {
 	key := playerKeyPrefix + player.PlayerID
 
 	data, err := json.Marshal(player)
@@ -191,13 +191,13 @@ func (s *Redis) GetActiveGameSessions(ctx context.Context) ([]*Session, error) {
 	return sessions, nil
 }
 
-func (s *Redis) GetHosts(ctx context.Context) ([]game.HostRegistratioMessage, error) {
+func (s *Redis) GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, error) {
 	hostKeys, err := s.client.SMembers(ctx, hostsSetKey).Result()
 	if err != nil {
 		return nil, fmt.Errorf("could not get host keys from set: %w", err)
 	}
 
-	hosts := make([]game.HostRegistratioMessage, 0, len(hostKeys))
+	hosts := make([]pubevts.HostRegistratioEvent, 0, len(hostKeys))
 	for _, key := range hostKeys {
 		data, err := s.client.Get(ctx, key).Bytes()
 		if err != nil {
@@ -209,7 +209,7 @@ func (s *Redis) GetHosts(ctx context.Context) ([]game.HostRegistratioMessage, er
 			return nil, fmt.Errorf("could not get host data from Redis: %w", err)
 		}
 
-		var host game.HostRegistratioMessage
+		var host pubevts.HostRegistratioEvent
 		if err := json.Unmarshal(data, &host); err != nil {
 			return nil, fmt.Errorf("could not unmarshal host data: %w", err)
 		}
@@ -218,13 +218,13 @@ func (s *Redis) GetHosts(ctx context.Context) ([]game.HostRegistratioMessage, er
 	return hosts, nil
 }
 
-func (s *Redis) GetPlayers(ctx context.Context) ([]game.MatchRequestMessage, error) {
+func (s *Redis) GetPlayers(ctx context.Context) ([]pubevts.MatchRequestEvent, error) {
 	playerKeys, err := s.client.SMembers(ctx, playersSetKey).Result()
 	if err != nil {
 		return nil, fmt.Errorf("could not get player keys from set: %w", err)
 	}
 
-	players := make([]game.MatchRequestMessage, 0, len(playerKeys))
+	players := make([]pubevts.MatchRequestEvent, 0, len(playerKeys))
 	for _, key := range playerKeys {
 		data, err := s.client.Get(ctx, key).Bytes()
 		if err != nil {
@@ -236,7 +236,7 @@ func (s *Redis) GetPlayers(ctx context.Context) ([]game.MatchRequestMessage, err
 			return nil, fmt.Errorf("could not get player data from Redis: %w", err)
 		}
 
-		var player game.MatchRequestMessage
+		var player pubevts.MatchRequestEvent
 		if err := json.Unmarshal(data, &player); err != nil {
 			return nil, fmt.Errorf("could not unmarshal player data: %w", err)
 		}

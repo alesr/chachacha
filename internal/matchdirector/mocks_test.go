@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/alesr/chachacha/internal/sessionrepo"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 )
 
 var _ repository = &repoMock{}
@@ -18,14 +18,14 @@ type repoMock struct {
 	updateHostAvailableSlotsCalled bool
 	removePlayerCalled             bool
 
-	getHostsFunc                 func(ctx context.Context) ([]game.HostRegistratioMessage, error)
-	getPlayersFunc               func(ctx context.Context) ([]game.MatchRequestMessage, error)
+	getHostsFunc                 func(ctx context.Context) ([]pubevts.HostRegistratioEvent, error)
+	getPlayersFunc               func(ctx context.Context) ([]pubevts.MatchRequestEvent, error)
 	storeGameSessionFunc         func(ctx context.Context, session *sessionrepo.Session) error
-	updateHostAvailableSlotsFunc func(ctx context.Context, hostIP string, slots int8) error
+	updateHostAvailableSlotsFunc func(ctx context.Context, hostIP string, slots uint16) error
 	removePlayerFunc             func(ctx context.Context, playerID string) error
 }
 
-func (m *repoMock) GetHosts(ctx context.Context) ([]game.HostRegistratioMessage, error) {
+func (m *repoMock) GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, error) {
 	m.mu.Lock()
 	m.getHostsCalled = true
 	m.mu.Unlock()
@@ -33,10 +33,10 @@ func (m *repoMock) GetHosts(ctx context.Context) ([]game.HostRegistratioMessage,
 	if m.getHostsFunc != nil {
 		return m.getHostsFunc(ctx)
 	}
-	return []game.HostRegistratioMessage{}, nil
+	return []pubevts.HostRegistratioEvent{}, nil
 }
 
-func (m *repoMock) GetPlayers(ctx context.Context) ([]game.MatchRequestMessage, error) {
+func (m *repoMock) GetPlayers(ctx context.Context) ([]pubevts.MatchRequestEvent, error) {
 	m.mu.Lock()
 	m.getPlayersCalled = true
 	m.mu.Unlock()
@@ -44,7 +44,7 @@ func (m *repoMock) GetPlayers(ctx context.Context) ([]game.MatchRequestMessage, 
 	if m.getPlayersFunc != nil {
 		return m.getPlayersFunc(ctx)
 	}
-	return []game.MatchRequestMessage{}, nil
+	return []pubevts.MatchRequestEvent{}, nil
 }
 
 func (m *repoMock) StoreGameSession(ctx context.Context, session *sessionrepo.Session) error {
@@ -58,7 +58,7 @@ func (m *repoMock) StoreGameSession(ctx context.Context, session *sessionrepo.Se
 	return nil
 }
 
-func (m *repoMock) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots int8) error {
+func (m *repoMock) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots uint16) error {
 	m.mu.Lock()
 	m.updateHostAvailableSlotsCalled = true
 	m.mu.Unlock()

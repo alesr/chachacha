@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,23 +26,23 @@ func TestNewRedisRepo(t *testing.T) {
 func TestRedis_StoreHost(t *testing.T) {
 	t.Parallel()
 
-	givenHost := game.HostRegistratioMessage{
+	givenHost := pubevts.HostRegistratioEvent{
 		HostID:         "host-123",
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: 4,
 	}
 
 	testCases := []struct {
 		name           string
-		setFunc        func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-		sAddFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+		setFunc        func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+		sAddFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 		expectErr      bool
 		expectSetCall  bool
 		expectSAddCall bool
 	}{
 		{
 			name: "successful store",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				assert.Equal(t, hostKeyPrefix+givenHost.HostID, key)
 				assert.Equal(t, hostTTL, expiration)
 
@@ -50,7 +50,7 @@ func TestRedis_StoreHost(t *testing.T) {
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var host game.HostRegistratioMessage
+				var host pubevts.HostRegistratioEvent
 				err := json.Unmarshal(valueBytes, &host)
 				assert.NoError(t, err)
 				assert.Equal(t, givenHost, host)
@@ -59,7 +59,7 @@ func TestRedis_StoreHost(t *testing.T) {
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				assert.Equal(t, hostsSetKey, key)
 				assert.Equal(t, 1, len(members))
 				assert.Equal(t, hostKeyPrefix+givenHost.HostID, members[0])
@@ -74,12 +74,12 @@ func TestRedis_StoreHost(t *testing.T) {
 		},
 		{
 			name: "set fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetVal(1)
 				return cmd
@@ -90,12 +90,12 @@ func TestRedis_StoreHost(t *testing.T) {
 		},
 		{
 			name: "sadd fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
@@ -134,19 +134,19 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 	t.Parallel()
 
 	hostID := "host-123"
-	originalSlots := int8(4)
-	updatedSlots := int8(2)
+	originalSlots := uint16(4)
+	updatedSlots := uint16(2)
 
-	givenHost := game.HostRegistratioMessage{
+	givenHost := pubevts.HostRegistratioEvent{
 		HostID:         hostID,
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: originalSlots,
 	}
 
 	testCases := []struct {
 		name          string
 		getFunc       func(ctx context.Context, key string) *redis.StringCmd
-		setFunc       func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+		setFunc       func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
 		expectErr     bool
 		expectGetCall bool
 		expectSetCall bool
@@ -163,7 +163,7 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 				cmd.SetVal(string(data))
 				return cmd
 			},
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				assert.Equal(t, hostKeyPrefix+hostID, key)
 				assert.Equal(t, hostTTL, expiration)
 
@@ -171,7 +171,7 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var host game.HostRegistratioMessage
+				var host pubevts.HostRegistratioEvent
 				err := json.Unmarshal(valueBytes, &host)
 				assert.NoError(t, err)
 				assert.Equal(t, updatedSlots, host.AvailableSlots)
@@ -191,7 +191,7 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 				cmd.SetErr(assert.AnError)
 				return cmd
 			},
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetVal("OK")
 				return cmd
@@ -210,7 +210,7 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 				cmd.SetVal(string(data))
 				return cmd
 			},
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
@@ -248,9 +248,9 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 func TestRedis_StorePlayer(t *testing.T) {
 	t.Parallel()
 
-	gameMode := game.GameMode("deathmatch")
+	gameMode := pubevts.GameMode("deathmatch")
 	hostID := "host-123"
-	givenPlayer := game.MatchRequestMessage{
+	givenPlayer := pubevts.MatchRequestEvent{
 		PlayerID: "player-456",
 		HostID:   &hostID,
 		Mode:     &gameMode,
@@ -258,15 +258,15 @@ func TestRedis_StorePlayer(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		setFunc        func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-		sAddFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+		setFunc        func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+		sAddFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 		expectErr      bool
 		expectSetCall  bool
 		expectSAddCall bool
 	}{
 		{
 			name: "successful store",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				assert.Equal(t, playerKeyPrefix+givenPlayer.PlayerID, key)
 				assert.Equal(t, playerTTL, expiration)
 
@@ -274,7 +274,7 @@ func TestRedis_StorePlayer(t *testing.T) {
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var player game.MatchRequestMessage
+				var player pubevts.MatchRequestEvent
 				err := json.Unmarshal(valueBytes, &player)
 				assert.NoError(t, err)
 				assert.Equal(t, givenPlayer, player)
@@ -283,7 +283,7 @@ func TestRedis_StorePlayer(t *testing.T) {
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				assert.Equal(t, playersSetKey, key)
 				assert.Equal(t, 1, len(members))
 				assert.Equal(t, playerKeyPrefix+givenPlayer.PlayerID, members[0])
@@ -298,12 +298,12 @@ func TestRedis_StorePlayer(t *testing.T) {
 		},
 		{
 			name: "set fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetVal(1)
 				return cmd
@@ -314,12 +314,12 @@ func TestRedis_StorePlayer(t *testing.T) {
 		},
 		{
 			name: "sadd fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
@@ -362,7 +362,7 @@ func TestRedis_RemovePlayer(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		sRemFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+		sRemFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 		delFunc        func(ctx context.Context, keys ...string) *redis.IntCmd
 		expectErr      bool
 		expectSRemCall bool
@@ -370,7 +370,7 @@ func TestRedis_RemovePlayer(t *testing.T) {
 	}{
 		{
 			name: "successful removal",
-			sRemFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sRemFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				assert.Equal(t, playersSetKey, key)
 				assert.Equal(t, 1, len(members))
 				assert.Equal(t, playerKey, members[0])
@@ -393,7 +393,7 @@ func TestRedis_RemovePlayer(t *testing.T) {
 		},
 		{
 			name: "srem fails",
-			sRemFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sRemFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
@@ -409,7 +409,7 @@ func TestRedis_RemovePlayer(t *testing.T) {
 		},
 		{
 			name: "del fails",
-			sRemFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sRemFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetVal(1)
 				return cmd
@@ -455,7 +455,7 @@ func TestRedis_StoreGameSession(t *testing.T) {
 	givenSession := &Session{
 		ID:             "session-789",
 		HostID:         "host-123",
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		CreatedAt:      time.Now(),
 		Players:        []string{"player-456", "player-457"},
 		AvailableSlots: 2,
@@ -463,15 +463,15 @@ func TestRedis_StoreGameSession(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		setFunc        func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-		sAddFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+		setFunc        func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+		sAddFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 		expectErr      bool
 		expectSetCall  bool
 		expectSAddCall bool
 	}{
 		{
 			name: "successful store",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				assert.Equal(t, sessionKeyPrefix+givenSession.ID, key)
 				assert.Equal(t, sessionTTL, expiration)
 
@@ -492,7 +492,7 @@ func TestRedis_StoreGameSession(t *testing.T) {
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				assert.Equal(t, activeSessionsKey, key)
 				assert.Equal(t, 1, len(members))
 				assert.Equal(t, sessionKeyPrefix+givenSession.ID, members[0])
@@ -507,12 +507,12 @@ func TestRedis_StoreGameSession(t *testing.T) {
 		},
 		{
 			name: "set fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetVal(1)
 				return cmd
@@ -523,12 +523,12 @@ func TestRedis_StoreGameSession(t *testing.T) {
 		},
 		{
 			name: "sadd fails",
-			setFunc: func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+			setFunc: func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 				cmd := redis.NewStatusCmd(ctx)
 				cmd.SetVal("OK")
 				return cmd
 			},
-			sAddFunc: func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+			sAddFunc: func(ctx context.Context, key string, members ...any) *redis.IntCmd {
 				cmd := redis.NewIntCmd(ctx)
 				cmd.SetErr(assert.AnError)
 				return cmd
@@ -572,7 +572,7 @@ func TestRedis_GetGameSession(t *testing.T) {
 	givenSession := &Session{
 		ID:             sessionID,
 		HostID:         "host-123",
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		CreatedAt:      time.Now(),
 		Players:        []string{"player-456", "player-457"},
 		AvailableSlots: 2,
@@ -659,7 +659,7 @@ func TestRedis_GetActiveGameSessions(t *testing.T) {
 	session1 := &Session{
 		ID:             "session-789",
 		HostID:         "host-123",
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		CreatedAt:      time.Now(),
 		Players:        []string{"player-456", "player-457"},
 		AvailableSlots: 2,
@@ -668,7 +668,7 @@ func TestRedis_GetActiveGameSessions(t *testing.T) {
 	session2 := &Session{
 		ID:             "session-790",
 		HostID:         "host-124",
-		Mode:           game.GameMode("capture-flag"),
+		Mode:           pubevts.GameMode("capture-flag"),
 		CreatedAt:      time.Now(),
 		Players:        []string{"player-458", "player-459"},
 		AvailableSlots: 4,
@@ -807,15 +807,15 @@ func TestRedis_GetActiveGameSessions(t *testing.T) {
 func TestRedis_GetHosts(t *testing.T) {
 	t.Parallel()
 
-	host1 := game.HostRegistratioMessage{
+	host1 := pubevts.HostRegistratioEvent{
 		HostID:         "host-123",
-		Mode:           game.GameMode("deathmatch"),
+		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: 4,
 	}
 
-	host2 := game.HostRegistratioMessage{
+	host2 := pubevts.HostRegistratioEvent{
 		HostID:         "host-124",
-		Mode:           game.GameMode("capture-flag"),
+		Mode:           pubevts.GameMode("capture-flag"),
 		AvailableSlots: 6,
 	}
 
@@ -835,7 +835,7 @@ func TestRedis_GetHosts(t *testing.T) {
 		expectErr          bool
 		expectSMembersCall bool
 		expectGetCall      bool
-		expectHosts        []game.HostRegistratioMessage
+		expectHosts        []pubevts.HostRegistratioEvent
 	}{
 		{
 			name: "successful get multiple hosts",
@@ -858,7 +858,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectHosts:        []game.HostRegistratioMessage{host1, host2},
+			expectHosts:        []pubevts.HostRegistratioEvent{host1, host2},
 		},
 		{
 			name: "smembers fails",
@@ -890,7 +890,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      false,
-			expectHosts:        []game.HostRegistratioMessage{},
+			expectHosts:        []pubevts.HostRegistratioEvent{},
 		},
 		{
 			name: "host expired but still in set",
@@ -907,7 +907,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectHosts:        []game.HostRegistratioMessage{},
+			expectHosts:        []pubevts.HostRegistratioEvent{},
 		},
 	}
 
@@ -950,18 +950,18 @@ func TestRedis_GetHosts(t *testing.T) {
 func TestRedis_GetPlayers(t *testing.T) {
 	t.Parallel()
 
-	gameMode1 := game.GameMode("deathmatch")
-	gameMode2 := game.GameMode("capture-flag")
+	gameMode1 := pubevts.GameMode("deathmatch")
+	gameMode2 := pubevts.GameMode("capture-flag")
 	hostID1 := "host-123"
 	hostID2 := "host-124"
 
-	player1 := game.MatchRequestMessage{
+	player1 := pubevts.MatchRequestEvent{
 		PlayerID: "player-456",
 		HostID:   &hostID1,
 		Mode:     &gameMode1,
 	}
 
-	player2 := game.MatchRequestMessage{
+	player2 := pubevts.MatchRequestEvent{
 		PlayerID: "player-457",
 		HostID:   &hostID2,
 		Mode:     &gameMode2,
@@ -983,7 +983,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 		expectErr          bool
 		expectSMembersCall bool
 		expectGetCall      bool
-		expectPlayers      []game.MatchRequestMessage
+		expectPlayers      []pubevts.MatchRequestEvent
 	}{
 		{
 			name: "successful get multiple players",
@@ -1006,7 +1006,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectPlayers:      []game.MatchRequestMessage{player1, player2},
+			expectPlayers:      []pubevts.MatchRequestEvent{player1, player2},
 		},
 		{
 			name: "smembers fails",
@@ -1038,7 +1038,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      false,
-			expectPlayers:      []game.MatchRequestMessage{},
+			expectPlayers:      []pubevts.MatchRequestEvent{},
 		},
 		{
 			name: "player expired but still in set",
@@ -1055,7 +1055,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectPlayers:      []game.MatchRequestMessage{},
+			expectPlayers:      []pubevts.MatchRequestEvent{},
 		},
 	}
 

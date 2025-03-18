@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/alesr/chachacha/internal/sessionrepo"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/oklog/ulid/v2"
 )
 
 type repository interface {
-	GetHosts(ctx context.Context) ([]game.HostRegistratioMessage, error)
-	GetPlayers(ctx context.Context) ([]game.MatchRequestMessage, error)
+	GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, error)
+	GetPlayers(ctx context.Context) ([]pubevts.MatchRequestEvent, error)
 	StoreGameSession(ctx context.Context, session *sessionrepo.Session) error
-	UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots int8) error
+	UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots uint16) error
 	RemovePlayer(ctx context.Context, playerID string) error
 }
 

@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pubevents "github.com/alesr/chachacha/pkg/events"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/alesr/chachacha/pkg/logutils"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +28,7 @@ func TestNew(t *testing.T) {
 
 	assert.Equal(t, givenLogger.WithGroup("match_registry"), got.logger)
 	assert.Equal(t, &givenRepo, got.repo)
-	assert.Equal(t, givenConsumerQueueName, got.consumerQueueName)
+	assert.Equal(t, givenConsumerQueueName, got.matchmakingQueueName)
 	assert.Equal(t, &givenConsumer, got.consumer)
 	assert.Equal(t, &givenPublisher, got.publisher)
 }
@@ -39,18 +38,18 @@ func TestMatchRegistry_Start(t *testing.T) {
 
 	logger := logutils.NewNoop()
 
-	hostMsg := game.HostRegistratioMessage{
+	hostMsg := pubevts.HostRegistratioEvent{
 		HostID:         "test-host-123",
-		Mode:           game.GameMode("foo-mode"),
+		Mode:           pubevts.GameMode("foo-mode"),
 		AvailableSlots: 2,
 	}
 
 	hostMsgBody, err := json.Marshal(hostMsg)
 	require.NoError(t, err)
 
-	gameMode := game.GameMode("foo-mode")
+	gameMode := pubevts.GameMode("foo-mode")
 
-	matchMsg := game.MatchRequestMessage{
+	matchMsg := pubevts.MatchRequestEvent{
 		PlayerID: "foo",
 		HostID:   stringToPtr("test-host-123"),
 		Mode:     &gameMode,
@@ -70,7 +69,7 @@ func TestMatchRegistry_Start(t *testing.T) {
 		{
 			name: "host registration",
 			givenDelivery: amqp091.Delivery{
-				Type: pubevents.MsgTypeHostRegistration,
+				Type: pubevts.MsgTypeHostRegistration,
 				Body: hostMsgBody,
 			},
 			expectStoreHost:          true,
@@ -79,7 +78,7 @@ func TestMatchRegistry_Start(t *testing.T) {
 		{
 			name: "match request",
 			givenDelivery: amqp091.Delivery{
-				Type: pubevents.MsgTypeMatchRequest,
+				Type: pubevts.MsgTypePlayerMatchRequest,
 				Body: matchMsgBody,
 			},
 			expectStorePlayer:                  true,
@@ -92,8 +91,8 @@ func TestMatchRegistry_Start(t *testing.T) {
 			t.Parallel()
 
 			repo := repoMock{
-				storeHostFunc:   func(ctx context.Context, host game.HostRegistratioMessage) error { return nil },
-				storePlayerFunc: func(ctx context.Context, player game.MatchRequestMessage) error { return nil },
+				storeHostFunc:   func(ctx context.Context, host pubevts.HostRegistratioEvent) error { return nil },
+				storePlayerFunc: func(ctx context.Context, player pubevts.MatchRequestEvent) error { return nil },
 			}
 
 			// use controlled delivery channel to send values to consumer
@@ -105,8 +104,8 @@ func TestMatchRegistry_Start(t *testing.T) {
 			}
 
 			publisher := publisherMock{
-				publishGameCreatedFunc:         func(ctx context.Context, event pubevents.GameCreatedEvent) error { return nil },
-				publishPlayerJoinRequestedFunc: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error { return nil },
+				publishGameCreatedFunc:         func(ctx context.Context, event pubevts.GameCreatedEvent) error { return nil },
+				publishPlayerJoinRequestedFunc: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error { return nil },
 			}
 
 			mr := New(logger, &repo, "foo-consumer-queue-name", &consumer, &publisher)
@@ -141,18 +140,18 @@ func TestMatchRegistry_tryDetectAndProcessMessage(t *testing.T) {
 
 	logger := logutils.NewNoop()
 
-	hostMsg := game.HostRegistratioMessage{
+	hostMsg := pubevts.HostRegistratioEvent{
 		HostID:         "test-host-123",
-		Mode:           game.GameMode("foo-mode"),
+		Mode:           pubevts.GameMode("foo-mode"),
 		AvailableSlots: 2,
 	}
 
 	hostMsgBody, err := json.Marshal(hostMsg)
 	require.NoError(t, err)
 
-	gameMode := game.GameMode("foo-mode")
+	gameMode := pubevts.GameMode("foo-mode")
 
-	matchMsg := game.MatchRequestMessage{
+	matchMsg := pubevts.MatchRequestEvent{
 		PlayerID: "foo",
 		HostID:   stringToPtr("test-host-123"),
 		Mode:     &gameMode,
@@ -199,13 +198,13 @@ func TestMatchRegistry_tryDetectAndProcessMessage(t *testing.T) {
 			t.Parallel()
 
 			repo := repoMock{
-				storeHostFunc:   func(ctx context.Context, host game.HostRegistratioMessage) error { return nil },
-				storePlayerFunc: func(ctx context.Context, player game.MatchRequestMessage) error { return nil },
+				storeHostFunc:   func(ctx context.Context, host pubevts.HostRegistratioEvent) error { return nil },
+				storePlayerFunc: func(ctx context.Context, player pubevts.MatchRequestEvent) error { return nil },
 			}
 
 			publisher := publisherMock{
-				publishGameCreatedFunc:         func(ctx context.Context, event pubevents.GameCreatedEvent) error { return nil },
-				publishPlayerJoinRequestedFunc: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error { return nil },
+				publishGameCreatedFunc:         func(ctx context.Context, event pubevts.GameCreatedEvent) error { return nil },
+				publishPlayerJoinRequestedFunc: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error { return nil },
 			}
 
 			mr := MatchRegistry{
@@ -232,30 +231,30 @@ func TestMatchRegistry_registerHost(t *testing.T) {
 
 	logger := logutils.NewNoop()
 
-	givenHost := game.HostRegistratioMessage{
+	givenHost := pubevts.HostRegistratioEvent{
 		HostID:         "test-host-123",
-		Mode:           game.GameMode("foo-mode"),
+		Mode:           pubevts.GameMode("foo-mode"),
 		AvailableSlots: 2,
 	}
 
 	testCases := []struct {
 		name                           string
-		givenRepoMock                  func(ctx context.Context, host game.HostRegistratioMessage) error
-		givenPublisherMock             func(ctx context.Context, event pubevents.GameCreatedEvent) error
+		givenRepoMock                  func(ctx context.Context, host pubevts.HostRegistratioEvent) error
+		givenPublisherMock             func(ctx context.Context, event pubevts.GameCreatedEvent) error
 		expectErr                      error
 		expectStoreHostCalled          bool
 		expectPublishGameCreatedCalled bool
 	}{
 		{
 			name: "register host successfully",
-			givenRepoMock: func(ctx context.Context, host game.HostRegistratioMessage) error {
+			givenRepoMock: func(ctx context.Context, host pubevts.HostRegistratioEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
 				assert.Equal(t, givenHost, host)
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.GameCreatedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.GameCreatedEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
@@ -273,10 +272,10 @@ func TestMatchRegistry_registerHost(t *testing.T) {
 		},
 		{
 			name: "fail to store host returns error",
-			givenRepoMock: func(ctx context.Context, host game.HostRegistratioMessage) error {
+			givenRepoMock: func(ctx context.Context, host pubevts.HostRegistratioEvent) error {
 				return assert.AnError
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.GameCreatedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.GameCreatedEvent) error {
 				return nil
 			},
 			expectErr:                      assert.AnError,
@@ -285,10 +284,10 @@ func TestMatchRegistry_registerHost(t *testing.T) {
 		},
 		{
 			name: "fail to publish game created does not return error",
-			givenRepoMock: func(ctx context.Context, host game.HostRegistratioMessage) error {
+			givenRepoMock: func(ctx context.Context, host pubevts.HostRegistratioEvent) error {
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.GameCreatedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.GameCreatedEvent) error {
 				return assert.AnError
 			},
 			expectErr:                      nil,
@@ -327,9 +326,9 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 
 	logger := logutils.NewNoop()
 
-	gameMode := game.GameMode("foo-mode")
+	gameMode := pubevts.GameMode("foo-mode")
 
-	givenMatchMsg := game.MatchRequestMessage{
+	givenMatchMsg := pubevts.MatchRequestEvent{
 		PlayerID: "foo",
 		HostID:   stringToPtr("test-host-123"),
 		Mode:     &gameMode,
@@ -337,9 +336,9 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 
 	testCases := []struct {
 		name                             string
-		givenMsg                         game.MatchRequestMessage
-		givenRepoMock                    func(ctx context.Context, player game.MatchRequestMessage) error
-		givenPublisherMock               func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
+		givenMsg                         pubevts.MatchRequestEvent
+		givenRepoMock                    func(ctx context.Context, player pubevts.MatchRequestEvent) error
+		givenPublisherMock               func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error
 		expectErr                        error
 		expectStorePlayerCalled          bool
 		expectPublishJoinRequestedCalled bool
@@ -347,14 +346,14 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 		{
 			name:     "register player with all data successfully",
 			givenMsg: givenMatchMsg,
-			givenRepoMock: func(ctx context.Context, player game.MatchRequestMessage) error {
+			givenRepoMock: func(ctx context.Context, player pubevts.MatchRequestEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
 				assert.Equal(t, givenMatchMsg, player)
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
@@ -371,19 +370,19 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 		},
 		{
 			name: "register player without host ID successfully",
-			givenMsg: game.MatchRequestMessage{
+			givenMsg: pubevts.MatchRequestEvent{
 				PlayerID: "foo",
 				// HostID:   stringToPtr("test-host-123"),
 				Mode: &gameMode,
 			},
-			givenRepoMock: func(ctx context.Context, player game.MatchRequestMessage) error {
+			givenRepoMock: func(ctx context.Context, player pubevts.MatchRequestEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
 				assert.Equal(t, givenMatchMsg, player)
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
@@ -400,19 +399,19 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 		},
 		{
 			name: "register player without host ID and game mode successfully",
-			givenMsg: game.MatchRequestMessage{
+			givenMsg: pubevts.MatchRequestEvent{
 				PlayerID: "foo",
 				// HostID:   stringToPtr("test-host-123"),
 				// Mode: &gameMode,
 			},
-			givenRepoMock: func(ctx context.Context, player game.MatchRequestMessage) error {
+			givenRepoMock: func(ctx context.Context, player pubevts.MatchRequestEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
 				assert.Equal(t, givenMatchMsg, player)
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 				_, ok := ctx.Deadline()
 				assert.True(t, ok)
 
@@ -430,10 +429,10 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 		{
 			name:     "fail to store player returns error",
 			givenMsg: givenMatchMsg,
-			givenRepoMock: func(ctx context.Context, player game.MatchRequestMessage) error {
+			givenRepoMock: func(ctx context.Context, player pubevts.MatchRequestEvent) error {
 				return assert.AnError
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 				return nil
 			},
 			expectErr:                        assert.AnError,
@@ -443,10 +442,10 @@ func TestMatchRegistry_registerPlayer(t *testing.T) {
 		{
 			name:     "fail to publish player join requested does not return error",
 			givenMsg: givenMatchMsg,
-			givenRepoMock: func(ctx context.Context, player game.MatchRequestMessage) error {
+			givenRepoMock: func(ctx context.Context, player pubevts.MatchRequestEvent) error {
 				return nil
 			},
-			givenPublisherMock: func(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error {
+			givenPublisherMock: func(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error {
 				return assert.AnError
 			},
 			expectErr:                        nil,

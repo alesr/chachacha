@@ -8,16 +8,15 @@ import (
 	"log/slog"
 	"time"
 
-	pubevents "github.com/alesr/chachacha/pkg/events"
-	"github.com/alesr/chachacha/pkg/game"
+	pubevts "github.com/alesr/chachacha/pkg/events"
 	"github.com/rabbitmq/amqp091-go"
 )
 
 const defaultCtxTimeout = time.Second * 5
 
 type repository interface {
-	StoreHost(ctx context.Context, host game.HostRegistratioMessage) error
-	StorePlayer(ctx context.Context, player game.MatchRequestMessage) error
+	StoreHost(ctx context.Context, host pubevts.HostRegistratioEvent) error
+	StorePlayer(ctx context.Context, player pubevts.MatchRequestEvent) error
 }
 
 type consumer interface {
@@ -25,42 +24,42 @@ type consumer interface {
 }
 
 type publisher interface {
-	PublishGameCreated(ctx context.Context, event pubevents.GameCreatedEvent) error
-	PublishPlayerJoinRequested(ctx context.Context, event pubevents.PlayerJoinRequestedEvent) error
+	PublishGameCreated(ctx context.Context, event pubevts.GameCreatedEvent) error
+	PublishPlayerJoinRequested(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error
 }
 
 type MatchRegistry struct {
-	logger            *slog.Logger
-	repo              repository
-	consumerQueueName string
-	consumer          consumer
-	publisher         publisher
-	ctx               context.Context
-	cancel            context.CancelFunc
+	logger               *slog.Logger
+	repo                 repository
+	matchmakingQueueName string
+	consumer             consumer
+	publisher            publisher
+	ctx                  context.Context
+	cancel               context.CancelFunc
 }
 
 func New(
 	logger *slog.Logger,
 	repo repository,
-	consumerQueueName string,
+	matchmakingQueueName string,
 	consumer consumer,
 	publisher publisher,
 ) *MatchRegistry {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MatchRegistry{
-		logger:            logger.WithGroup("match_registry"),
-		repo:              repo,
-		consumerQueueName: consumerQueueName,
-		consumer:          consumer,
-		publisher:         publisher,
-		ctx:               ctx,
-		cancel:            cancel,
+		logger:               logger.WithGroup("match_registry"),
+		repo:                 repo,
+		matchmakingQueueName: matchmakingQueueName,
+		consumer:             consumer,
+		publisher:            publisher,
+		ctx:                  ctx,
+		cancel:               cancel,
 	}
 }
 
 func (mr *MatchRegistry) Start() error {
 	msgs, err := mr.consumer.Consume(
-		mr.consumerQueueName, // queue from which messages are consumed
+		mr.matchmakingQueueName, // queue from which messages are consumed
 		"match_registry_consumer",
 		true,  // auto-acknowledge: messages are automatically marked as delivered
 		false, // non-exclusive: allows multiple consumers on the same queue
@@ -69,7 +68,7 @@ func (mr *MatchRegistry) Start() error {
 		nil,   // additional arguments
 	)
 	if err != nil {
-		return fmt.Errorf("could not register consumer for queue '%s': %w", mr.consumerQueueName, err)
+		return fmt.Errorf("could not register consumer for queue '%s': %w", mr.matchmakingQueueName, err)
 	}
 
 	go func() {
@@ -87,8 +86,8 @@ func (mr *MatchRegistry) Start() error {
 				messageType := d.Type
 
 				switch messageType {
-				case pubevents.MsgTypeHostRegistration:
-					var hostMsg game.HostRegistratioMessage
+				case pubevts.MsgTypeHostRegistration:
+					var hostMsg pubevts.HostRegistratioEvent
 					if err := json.Unmarshal(d.Body, &hostMsg); err != nil {
 						mr.logger.Error("Error unmarshaling host registration message", slog.String("error", err.Error()))
 						continue
@@ -100,8 +99,8 @@ func (mr *MatchRegistry) Start() error {
 						mr.logger.Debug("Host registered successfully", slog.String("host_ip", hostMsg.HostID))
 					}
 
-				case pubevents.MsgTypeMatchRequest:
-					var playerMsg game.MatchRequestMessage
+				case pubevts.MsgTypePlayerMatchRequest:
+					var playerMsg pubevts.MatchRequestEvent
 					if err := json.Unmarshal(d.Body, &playerMsg); err != nil {
 						mr.logger.Error("Error unmarshaling match request message", slog.String("error", err.Error()))
 						continue
@@ -151,7 +150,7 @@ func (mr *MatchRegistry) tryDetectAndProcessMessage(msgBody []byte) error {
 
 	// Check if it has the PlayerID field, which would indicate a match request
 	if _, hasPlayerID := msg["player_id"]; hasPlayerID {
-		var playerMsg game.MatchRequestMessage
+		var playerMsg pubevts.MatchRequestEvent
 		if err := json.Unmarshal(msgBody, &playerMsg); err != nil {
 			return fmt.Errorf("could not parse as match request: %w", err)
 		}
@@ -160,7 +159,7 @@ func (mr *MatchRegistry) tryDetectAndProcessMessage(msgBody []byte) error {
 
 	// Otherwise, try as host registration
 	if _, hasHostID := msg["host_id"]; hasHostID {
-		var hostMsg game.HostRegistratioMessage
+		var hostMsg pubevts.HostRegistratioEvent
 		if err := json.Unmarshal(msgBody, &hostMsg); err != nil {
 			return fmt.Errorf("could not parse as host registration: %w", err)
 		}
@@ -169,7 +168,7 @@ func (mr *MatchRegistry) tryDetectAndProcessMessage(msgBody []byte) error {
 	return errors.New("could not determine message type")
 }
 
-func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
+func (mr *MatchRegistry) registerHost(msg pubevts.HostRegistratioEvent) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultCtxTimeout)
 	defer cancel()
 
@@ -177,7 +176,7 @@ func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
 		return fmt.Errorf("could not store host game message: %w", err)
 	}
 
-	event := pubevents.GameCreatedEvent{
+	event := pubevts.GameCreatedEvent{
 		GameID:     msg.HostID, // Using host ID as game ID
 		HostID:     msg.HostID,
 		MaxPlayers: uint16(msg.AvailableSlots),
@@ -202,7 +201,7 @@ func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
 	return nil
 }
 
-func (mr *MatchRegistry) registerPlayer(msg game.MatchRequestMessage) error {
+func (mr *MatchRegistry) registerPlayer(msg pubevts.MatchRequestEvent) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultCtxTimeout)
 	defer cancel()
 
@@ -220,7 +219,7 @@ func (mr *MatchRegistry) registerPlayer(msg game.MatchRequestMessage) error {
 		gameMode = string(*msg.Mode)
 	}
 
-	event := pubevents.PlayerJoinRequestedEvent{
+	event := pubevts.PlayerJoinRequestedEvent{
 		PlayerID:  msg.PlayerID,
 		HostID:    &hostID,
 		GameMode:  &gameMode,
