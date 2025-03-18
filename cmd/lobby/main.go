@@ -76,9 +76,15 @@ func main() {
 		}
 	}
 
-	// Initialize match registry
+	// Initialize redis repo and match registry
 
-	repo, err := sessionrepo.NewRedisRepo(cfg.RedisAddr)
+	redisCli, err := sessionrepo.NewRedisClient(cfg.RedisAddr)
+	if err != nil {
+		logger.Error("Failed to init Redis client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	repo, err := sessionrepo.NewRedisRepo(redisCli)
 	if err != nil {
 		logger.Error("Failed to connect to Redis", slog.String("error", err.Error()))
 		os.Exit(1)

@@ -49,7 +49,10 @@ func TestMatchmaking(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	repo, err := sessionrepo.NewRedisRepo(redisAddr)
+	redisCli, err := sessionrepo.NewRedisClient(redisAddr)
+	require.NoError(t, err)
+
+	repo, err := sessionrepo.NewRedisRepo(redisCli)
 	require.NoError(t, err)
 
 	logger := logutils.NewNoop()

@@ -24,9 +24,15 @@ func main() {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
-	// Initialize match director
+	// Initialize redis client and match director
 
-	repo, err := sessionrepo.NewRedisRepo(cfg.RedisAddr)
+	redisCli, err := sessionrepo.NewRedisClient(cfg.RedisAddr)
+	if err != nil {
+		logger.Error("Failed to init Redis client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	repo, err := sessionrepo.NewRedisRepo(redisCli)
 	if err != nil {
 		logger.Error("Failed to connect to Redis", slog.String("error", err.Error()))
 		os.Exit(1)

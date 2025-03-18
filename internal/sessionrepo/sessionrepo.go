@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/alesr/chachacha/pkg/game"
@@ -23,6 +22,15 @@ const (
 	sessionTTL        = 2 * time.Hour
 )
 
+type redisClient interface {
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	SAdd(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	Get(ctx context.Context, key string) *redis.StringCmd
+	SRem(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	SMembers(ctx context.Context, key string) *redis.StringSliceCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+}
+
 type Session struct {
 	ID             string        `json:"session_id"`
 	HostID         string        `json:"host_id"`
@@ -33,34 +41,11 @@ type Session struct {
 }
 
 type Redis struct {
-	client *redis.Client
+	client redisClient
 }
 
-func NewRedisRepo(addr string) (*Redis, error) {
-	var options *redis.Options
-
-	// Handle both redis:// URL format and direct address format
-	if strings.HasPrefix(addr, "redis://") {
-		opt, err := redis.ParseURL(addr)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse Redis URL: %w", err)
-		}
-		options = opt
-	} else {
-		options = &redis.Options{
-			Addr: addr,
-		}
-	}
-
-	client := redis.NewClient(options)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("could not connect to Redis: %w", err)
-	}
-	return &Redis{client: client}, nil
+func NewRedisRepo(redisCli redisClient) (*Redis, error) {
+	return &Redis{client: redisCli}, nil
 }
 
 func (s *Redis) StoreHost(ctx context.Context, host game.HostRegistratioMessage) error {
