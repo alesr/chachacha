@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/alesr/chachacha/internal/sessionrepo"
@@ -24,6 +25,7 @@ type MatchDirector struct {
 	repo        repository
 	matchTicker *time.Ticker
 	stopChan    chan struct{}
+	wg          sync.WaitGroup
 }
 
 func New(logger *slog.Logger, repo repository, matchInterval time.Duration) (*MatchDirector, error) {
@@ -38,7 +40,10 @@ func New(logger *slog.Logger, repo repository, matchInterval time.Duration) (*Ma
 func (md *MatchDirector) Start() {
 	md.logger.Info("Starting match director")
 
+	md.wg.Add(1)
+
 	go func() {
+		defer md.wg.Done()
 		for {
 			select {
 			case <-md.matchTicker.C:
@@ -56,6 +61,7 @@ func (md *MatchDirector) Start() {
 
 func (md *MatchDirector) Stop() {
 	close(md.stopChan)
+	md.wg.Wait()
 }
 
 func (md *MatchDirector) matchPlayers() error {
