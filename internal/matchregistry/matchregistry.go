@@ -180,7 +180,7 @@ func (mr *MatchRegistry) registerHost(msg game.HostRegistratioMessage) error {
 	event := pubevents.GameCreatedEvent{
 		GameID:     msg.HostID, // Using host ID as game ID
 		HostID:     msg.HostID,
-		MaxPlayers: int8(msg.AvailableSlots),
+		MaxPlayers: uint16(msg.AvailableSlots),
 		GameMode:   string(msg.Mode),
 		CreatedAt:  time.Now(),
 	}

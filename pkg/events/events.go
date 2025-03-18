@@ -19,7 +19,7 @@ type GameCreatedEvent struct {
 	GameID     string    `json:"game_id"`
 	HostID     string    `json:"host_id"`
 	GameMode   string    `json:"game_mode"`
-	MaxPlayers int8      `json:"max_players"`
+	MaxPlayers uint16    `json:"max_players"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
