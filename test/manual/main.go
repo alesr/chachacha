@@ -105,13 +105,13 @@ func registerHost(ctx context.Context, ch *amqp091.Channel, queueName string) {
 
 	if err := ch.PublishWithContext(
 		ctx,
-		"",        // exchange
-		queueName, // routing key
-		false,     // mandatory
-		false,     // immediate
+		pubevts.ExchangeMatchRequest,   // exchange (reusing the same direct exchange)
+		pubevts.RoutingKeyMatchRequest, // routing key
+		false,                          // mandatory
+		false,                          // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "host_registration",
+			ContentType: pubevts.ContentType,
+			Type:        pubevts.MsgTypeHostRegistration,
 			Body:        msgBody,
 		},
 	); err != nil {
@@ -163,13 +163,13 @@ func registerPlayer(ctx context.Context, ch *amqp091.Channel, queueName string) 
 
 	if err := ch.PublishWithContext(
 		ctx,
-		"",        // exchange
-		queueName, // routing key
-		false,     // mandatory
-		false,     // immediate
+		pubevts.ExchangeMatchRequest,   // exchange (reusing the same direct exchange)
+		pubevts.RoutingKeyMatchRequest, // routing key
+		false,                          // mandatory
+		false,                          // immediate
 		amqp091.Publishing{
-			ContentType: "application/json",
-			Type:        "match_request",
+			ContentType: pubevts.ContentType,
+			Type:        pubevts.MsgTypePlayerMatchRequest,
 			Body:        msgBody,
 		},
 	); err != nil {

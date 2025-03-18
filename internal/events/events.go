@@ -87,6 +87,45 @@ func (p *Publisher) publishEvent(ctx context.Context, exchange string, event int
 	return nil
 }
 
+// SetupInputExchangeBindings binds the input exchanges to the matchmaking queue.
+func SetupInputExchangeBindings(ch *amqp091.Channel, queueName string) error {
+	if err := ch.ExchangeDeclare(
+		pubevts.ExchangeMatchRequest, // name
+		"direct",                     // type
+		false,                        // durable
+		false,                        // auto-deleted
+		false,                        // internal
+		false,                        // no-wait
+		nil,                          // arguments
+	); err != nil {
+		return fmt.Errorf("failed to declare input exchange: %w", err)
+	}
+
+	// Bind the host registration routing key to the matchmaking queue
+	if err := ch.QueueBind(
+		queueName,                          // queue name
+		pubevts.RoutingKeyHostRegistration, // routing key
+		pubevts.ExchangeMatchRequest,       // exchange
+		false,                              // no-wait
+		nil,                                // args
+	); err != nil {
+		return fmt.Errorf("could not bind queue to host registration routing key: %w", err)
+	}
+
+	// Bind the match request routing key to the matchmaking queue
+	if err := ch.QueueBind(
+		queueName,                      // queue name
+		pubevts.RoutingKeyMatchRequest, // routing key
+		pubevts.ExchangeMatchRequest,   // exchange (reusing the same direct exchange)
+		false,                          // no-wait
+		nil,                            // args
+	); err != nil {
+		return fmt.Errorf("could not bind queue to match request routing key: %w", err)
+	}
+	return nil
+}
+
+// SetupMonitoringQueues binds the exchanges for the monitoring queues.
 func SetupMonitoringQueues(ch *amqp091.Channel) error {
 	// Create a monitoring queue for each exchange
 

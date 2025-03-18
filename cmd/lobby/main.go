@@ -61,6 +61,11 @@ func main() {
 
 	logger.Debug("Queue declared successfully", slog.String("queue_name", q.Name))
 
+	if err := events.SetupInputExchangeBindings(ch, cfg.QueueName); err != nil {
+		logger.Error("Failed to setup input exchange bindings", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// Create the publisher first, which will declare the exchanges
 	publisher, err := events.NewPublisher(ch)
 	if err != nil {
