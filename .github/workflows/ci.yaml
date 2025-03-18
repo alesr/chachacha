@@ -48,7 +48,7 @@ jobs:
           slug: alesr/chachacha
   e2e-tests:
     runs-on: ubuntu-latest
-    needs: [test, verify, vet, security]
+    needs: [unit-tests, verify, vet, security]
 
     steps:
       - name: Checkout code
