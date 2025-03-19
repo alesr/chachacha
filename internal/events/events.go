@@ -64,7 +64,7 @@ func (p *Publisher) PublishPlayerMatchError(ctx context.Context, event pubevts.P
 }
 
 // publishEvent publishes an event to a specific exchange.
-func (p *Publisher) publishEvent(ctx context.Context, exchange string, event interface{}) error {
+func (p *Publisher) publishEvent(ctx context.Context, exchange string, event any) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("could not marshal event: %w", err)

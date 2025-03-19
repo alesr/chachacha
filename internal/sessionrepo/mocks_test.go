@@ -20,10 +20,10 @@ type redisMock struct {
 	sRemCalled     bool
 	sMembersCalled bool
 	delCalled      bool
-	setFunc        func(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-	sAddFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	setFunc        func(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+	sAddFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 	getFunc        func(ctx context.Context, key string) *redis.StringCmd
-	sRemFunc       func(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	sRemFunc       func(ctx context.Context, key string, members ...any) *redis.IntCmd
 	sMembersFunc   func(ctx context.Context, key string) *redis.StringSliceCmd
 	delFunc        func(ctx context.Context, keys ...string) *redis.IntCmd
 }
@@ -35,7 +35,7 @@ func newRedisMock() *redisMock {
 	}
 }
 
-func (m *redisMock) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+func (m *redisMock) Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 	m.mu.Lock()
 	m.setCalled = true
 	m.mu.Unlock()
@@ -57,7 +57,7 @@ func (m *redisMock) Set(ctx context.Context, key string, value interface{}, expi
 	return redis.NewStatusCmd(ctx)
 }
 
-func (m *redisMock) SAdd(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+func (m *redisMock) SAdd(ctx context.Context, key string, members ...any) *redis.IntCmd {
 	m.mu.Lock()
 	m.sAddCalled = true
 	m.mu.Unlock()
@@ -71,7 +71,7 @@ func (m *redisMock) SAdd(ctx context.Context, key string, members ...interface{}
 		m.sets[key] = make(map[string]struct{})
 	}
 
-	added := int64(0)
+	var added int64
 	for _, member := range members {
 		strMember := member.(string)
 		if _, exists := m.sets[key][strMember]; !exists {
@@ -109,7 +109,7 @@ func (m *redisMock) Get(ctx context.Context, key string) *redis.StringCmd {
 	return cmd
 }
 
-func (m *redisMock) SRem(ctx context.Context, key string, members ...interface{}) *redis.IntCmd {
+func (m *redisMock) SRem(ctx context.Context, key string, members ...any) *redis.IntCmd {
 	m.mu.Lock()
 	m.sRemCalled = true
 	m.mu.Unlock()
@@ -119,7 +119,8 @@ func (m *redisMock) SRem(ctx context.Context, key string, members ...interface{}
 	}
 
 	m.mu.Lock()
-	removed := int64(0)
+
+	var removed int64
 	if set, exists := m.sets[key]; exists {
 		for _, member := range members {
 			strMember := member.(string)

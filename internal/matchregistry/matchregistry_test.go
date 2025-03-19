@@ -41,7 +41,7 @@ func TestMatchRegistry_Start(t *testing.T) {
 	testCases := []struct {
 		name          string
 		messageType   string
-		message       interface{}
+		message       any
 		setupMocks    func(*repoMock, *publisherMock)
 		checkBehavior func(*testing.T, *repoMock, *publisherMock)
 	}{
@@ -190,7 +190,7 @@ func TestMatchRegistry_MessageTypeDetection(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		message       interface{}
+		message       any
 		setupMocks    func(*repoMock, *publisherMock)
 		checkBehavior func(*testing.T, *repoMock, *publisherMock)
 	}{

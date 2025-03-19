@@ -30,10 +30,10 @@ const (
 )
 
 type redisClient interface {
-	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-	SAdd(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+	SAdd(ctx context.Context, key string, members ...any) *redis.IntCmd
 	Get(ctx context.Context, key string) *redis.StringCmd
-	SRem(ctx context.Context, key string, members ...interface{}) *redis.IntCmd
+	SRem(ctx context.Context, key string, members ...any) *redis.IntCmd
 	SMembers(ctx context.Context, key string) *redis.StringSliceCmd
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
 }
