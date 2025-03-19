@@ -13,25 +13,37 @@ import (
 )
 
 type repository interface {
-	GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, error)
-	GetPlayers(ctx context.Context) ([]pubevts.MatchRequestEvent, error)
+	GetHosts(ctx context.Context) ([]pubevts.HostRegistrationEvent, error)
+	GetPlayers(ctx context.Context) ([]pubevts.PlayerMatchRequestEvent, error)
+	StorePlayer(ctx context.Context, player pubevts.PlayerMatchRequestEvent) error
 	StoreGameSession(ctx context.Context, session *sessionrepo.Session) error
-	UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots uint16) error
+	UpdateHostAvailableSlots(ctx context.Context, hostID string, slots uint16) error
 	RemovePlayer(ctx context.Context, playerID string) error
+	RemoveHost(ctx context.Context, hostID string) error
+	GetGameSession(ctx context.Context, sessionID string) (*sessionrepo.Session, error)
+	GetActiveGameSessions(ctx context.Context) ([]*sessionrepo.Session, error)
+	GetHostInActiveSession(ctx context.Context, hostID string) (*sessionrepo.Session, error)
+	GetPlayerInActiveSession(ctx context.Context, playerID string) (*sessionrepo.Session, error)
+}
+
+type publisher interface {
+	PublishPlayerJoinRequested(ctx context.Context, event pubevts.PlayerJoinRequestedEvent) error
 }
 
 type MatchDirector struct {
 	logger      *slog.Logger
 	repo        repository
+	publisher   publisher
 	matchTicker *time.Ticker
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 }
 
-func New(logger *slog.Logger, repo repository, matchInterval time.Duration) (*MatchDirector, error) {
+func New(logger *slog.Logger, repo repository, publisher publisher, matchInterval time.Duration) (*MatchDirector, error) {
 	return &MatchDirector{
 		logger:      logger.WithGroup("match_director"),
 		repo:        repo,
+		publisher:   publisher,
 		matchTicker: time.NewTicker(matchInterval),
 		stopChan:    make(chan struct{}),
 	}, nil
@@ -39,9 +51,7 @@ func New(logger *slog.Logger, repo repository, matchInterval time.Duration) (*Ma
 
 func (md *MatchDirector) Start() {
 	md.logger.Info("Starting match director")
-
 	md.wg.Add(1)
-
 	go func() {
 		defer md.wg.Done()
 		for {
@@ -60,8 +70,94 @@ func (md *MatchDirector) Start() {
 }
 
 func (md *MatchDirector) Stop() {
-	close(md.stopChan)
-	md.wg.Wait()
+	if md.stopChan != nil {
+		close(md.stopChan)
+		md.wg.Wait()
+	}
+}
+
+func (md *MatchDirector) HandleHostDisconnection(ctx context.Context, hostID string) error {
+	session, err := md.repo.GetHostInActiveSession(ctx, hostID)
+	if err != nil {
+		return fmt.Errorf("failed to get session for host: %w", err)
+	}
+
+	if session == nil {
+		return md.repo.RemoveHost(ctx, hostID)
+	}
+
+	for _, playerID := range session.Players {
+		playerEvent := pubevts.PlayerMatchRequestEvent{
+			PlayerID: playerID,
+			Mode:     &session.Mode,
+		}
+
+		if err := md.repo.StorePlayer(ctx, playerEvent); err != nil {
+			md.logger.Error("Failed to requeue player",
+				slog.String("player_id", playerID),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		joinRequestEvent := pubevts.PlayerJoinRequestedEvent{
+			PlayerID:  playerID,
+			GameMode:  &session.Mode,
+			CreatedAt: time.Now(),
+		}
+
+		if err := md.publisher.PublishPlayerJoinRequested(ctx, joinRequestEvent); err != nil {
+			md.logger.Error("Failed to publish player requeue event",
+				slog.String("player_id", playerID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	session.State = sessionrepo.SessionStateCancelled
+	if err := md.repo.StoreGameSession(ctx, session); err != nil {
+		md.logger.Error("Failed to update session state",
+			slog.String("session_id", session.ID),
+			slog.String("error", err.Error()),
+		)
+	}
+	return md.repo.RemoveHost(ctx, hostID)
+}
+
+func (md *MatchDirector) HandlePlayerDisconnection(ctx context.Context, playerID string) error {
+	session, err := md.repo.GetPlayerInActiveSession(ctx, playerID)
+	if err != nil {
+		return fmt.Errorf("failed to get session for player: %w", err)
+	}
+
+	if session == nil {
+		return md.repo.RemovePlayer(ctx, playerID)
+	}
+
+	newPlayers := make([]string, 0, len(session.Players))
+	for _, p := range session.Players {
+		if p != playerID {
+			newPlayers = append(newPlayers, p)
+		}
+	}
+	session.Players = newPlayers
+	session.AvailableSlots++
+
+	if session.State == sessionrepo.SessionStateComplete {
+		session.State = sessionrepo.SessionStateAwaiting
+	}
+
+	if err := md.repo.StoreGameSession(ctx, session); err != nil {
+		return fmt.Errorf("failed to update session: %w", err)
+	}
+
+	if err := md.repo.UpdateHostAvailableSlots(ctx, session.HostID, session.AvailableSlots); err != nil {
+		md.logger.Error("Failed to update host slots",
+			slog.String("host_id", session.HostID),
+			slog.String("error", err.Error()),
+		)
+	}
+	return md.repo.RemovePlayer(ctx, playerID)
 }
 
 func (md *MatchDirector) matchPlayers() error {
@@ -88,164 +184,180 @@ func (md *MatchDirector) matchPlayers() error {
 		return nil
 	}
 
-	md.logger.Debug("Found hosts and players for matching", slog.Int("len_hosts", len(hosts)), slog.Int("len_players", len(players)))
+	activeSessions, err := md.repo.GetActiveGameSessions(ctx)
+	if err != nil {
+		return fmt.Errorf("could not get active sessions: %w", err)
+	}
 
-	var (
-		matchesFound    int
-		sessionsCreated int
-	)
-
-	// Maps to keep track of hosts and players that need updating
-	playersToRemove := make(map[string]bool)
-	sessionsByHost := make(map[string]*sessionrepo.Session)
-
-	// First pass: Match players with specific host requests
-	for i := range hosts {
-		host := &hosts[i]
-
-		// Get or create a session for this host
-		session, exists := sessionsByHost[host.HostID]
-		if !exists {
-			session = &sessionrepo.Session{
-				ID:             ulid.Make().String(),
-				HostID:         host.HostID,
-				Mode:           host.Mode,
-				CreatedAt:      time.Now(),
-				Players:        []string{},
-				AvailableSlots: host.AvailableSlots,
-			}
-			sessionsByHost[host.HostID] = session
-		}
-
-		// First, match players that specifically requested this host
-		for _, player := range players {
-			// Skip players that have already been matched
-			if playersToRemove[player.PlayerID] {
-				continue
-			}
-
-			// Check if player specified this host IP
-			if player.HostID != nil && *player.HostID == host.HostID {
-				// Check if host has available slots
-				if session.AvailableSlots <= 0 {
-					md.logger.Debug(
-						"Host has no available slots for player",
-						slog.String("host_ip", host.HostID),
-						slog.String("player_id", player.PlayerID),
-					)
-					continue
-				}
-
-				// Check if player specified a game mode and it matches
-				if player.Mode != nil && *player.Mode != host.Mode {
-					md.logger.Info(
-						"Game mode mismatch for player and host",
-						slog.String("player_id", player.PlayerID), slog.String("host_ip", host.HostID),
-						slog.String("player_mode", string(*player.Mode)),
-						slog.String("host_mode", string(host.Mode)),
-					)
-					continue
-				}
-
-				// Match found!
-				md.logger.Debug(
-					"Matched player with specific host request for game mode",
-					slog.String("player_id", player.PlayerID),
-					slog.String("host_ip", host.HostID),
-					slog.String("host_mode", string(host.Mode)),
-				)
-
-				session.Players = append(session.Players, player.PlayerID)
-				session.AvailableSlots--
-				playersToRemove[player.PlayerID] = true
-				matchesFound++
-			}
+	availableSessions := make(map[string]*sessionrepo.Session)
+	for _, session := range activeSessions {
+		if session.State == sessionrepo.SessionStateAwaiting {
+			availableSessions[session.HostID] = session
 		}
 	}
 
-	// Second pass: Match remaining players with any compatible host
-	for i := range hosts {
-		host := &hosts[i]
-		session := sessionsByHost[host.HostID]
+	md.logger.Debug("Starting matching process",
+		slog.Int("hosts", len(hosts)),
+		slog.Int("players", len(players)),
+		slog.Int("available_sessions", len(availableSessions)),
+	)
 
-		// Skip hosts with no available slots
-		if session.AvailableSlots <= 0 {
+	matchResults := md.processMatches(hosts, players, availableSessions)
+
+	if err := md.storeMatchResults(ctx, matchResults); err != nil {
+		return fmt.Errorf("failed to store match results: %w", err)
+	}
+
+	return nil
+}
+
+type matchResult struct {
+	session        *sessionrepo.Session
+	matchedPlayers []string
+}
+
+func (md *MatchDirector) processMatches(
+	hosts []pubevts.HostRegistrationEvent,
+	players []pubevts.PlayerMatchRequestEvent,
+	availableSessions map[string]*sessionrepo.Session,
+) map[string]matchResult {
+	results := make(map[string]matchResult)
+	matchedPlayers := make(map[string]bool)
+
+	// First, try to fill existing sessions
+	for _, player := range players {
+		if matchedPlayers[player.PlayerID] {
 			continue
 		}
 
-		for _, player := range players {
-			// Skip players that have already been matched
-			if playersToRemove[player.PlayerID] {
+		for hostID, session := range availableSessions {
+			if session.AvailableSlots == 0 {
 				continue
 			}
 
-			// Skip players who specified a different host
-			if player.HostID != nil && *player.HostID != host.HostID {
+			if player.HostID != nil && *player.HostID != hostID {
 				continue
 			}
 
-			// Check if player specified a game mode and it matches
-			if player.Mode != nil && *player.Mode != host.Mode {
+			if player.Mode != nil && *player.Mode != session.Mode {
 				continue
 			}
 
 			// Match found!
-			md.logger.Debug(
-				"Matched player with compatible host request for game mode",
-				slog.String("player_id", player.PlayerID),
-				slog.String("host_ip", host.HostID),
-				slog.String("host_mode", string(host.Mode)),
-			)
+			result := results[hostID]
+			if result.session == nil {
+				result.session = session
+				result.matchedPlayers = make([]string, 0)
+			}
 
-			session.Players = append(session.Players, player.PlayerID)
-			session.AvailableSlots--
-			playersToRemove[player.PlayerID] = true
-			matchesFound++
+			result.matchedPlayers = append(result.matchedPlayers, player.PlayerID)
+			result.session.Players = append(result.session.Players, player.PlayerID)
+			result.session.AvailableSlots--
+			matchedPlayers[player.PlayerID] = true
+			results[hostID] = result
 
-			// If this host is full, move to the next host
-			if session.AvailableSlots <= 0 {
+			if result.session.AvailableSlots == 0 {
+				result.session.State = sessionrepo.SessionStateComplete
 				break
 			}
 		}
 	}
 
-	// Now, update all the hosts in Redis and create game sessions
-	for hostIP, session := range sessionsByHost {
-		if len(session.Players) > 0 {
-			// Players were matched, create a game session
-			if err := md.repo.StoreGameSession(ctx, session); err != nil {
-				md.logger.Error(
-					"Error storing game session for host",
-					slog.String("host_ip", hostIP), slog.String("error", err.Error()),
+	// Then create new sessions for remaining players
+	for _, host := range hosts {
+		if _, exists := results[host.HostID]; exists {
+			continue
+		}
+
+		session := &sessionrepo.Session{
+			ID:             ulid.Make().String(),
+			HostID:         host.HostID,
+			Mode:           host.Mode,
+			CreatedAt:      time.Now(),
+			AvailableSlots: host.AvailableSlots,
+			State:          sessionrepo.SessionStateAwaiting,
+			Players:        make([]string, 0),
+		}
+
+		matchedForHost := make([]string, 0)
+
+		for _, player := range players {
+			if matchedPlayers[player.PlayerID] {
+				continue
+			}
+
+			if player.HostID != nil && *player.HostID != host.HostID {
+				continue
+			}
+
+			if player.Mode != nil && *player.Mode != host.Mode {
+				continue
+			}
+
+			matchedForHost = append(matchedForHost, player.PlayerID)
+			session.Players = append(session.Players, player.PlayerID)
+			session.AvailableSlots--
+			matchedPlayers[player.PlayerID] = true
+
+			if session.AvailableSlots == 0 {
+				session.State = sessionrepo.SessionStateComplete
+				break
+			}
+		}
+
+		if len(matchedForHost) > 0 {
+			results[host.HostID] = matchResult{
+				session:        session,
+				matchedPlayers: matchedForHost,
+			}
+		}
+	}
+
+	return results
+}
+
+func (md *MatchDirector) storeMatchResults(ctx context.Context, results map[string]matchResult) error {
+	for hostID, result := range results {
+		if err := md.repo.StoreGameSession(ctx, result.session); err != nil {
+			md.logger.Error("Failed to store game session",
+				slog.String("host_id", hostID),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		if err := md.repo.UpdateHostAvailableSlots(ctx, hostID, result.session.AvailableSlots); err != nil {
+			md.logger.Error("Failed to update host slots",
+				slog.String("host_id", hostID),
+				slog.String("error", err.Error()),
+			)
+		}
+
+		// Remove matched players and send notifications
+		for _, playerID := range result.matchedPlayers {
+			if err := md.repo.RemovePlayer(ctx, playerID); err != nil {
+				md.logger.Error("Failed to remove matched player",
+					slog.String("player_id", playerID),
+					slog.String("error", err.Error()),
 				)
 				continue
 			}
 
-			// Update the host's available slots
-			err := md.repo.UpdateHostAvailableSlots(ctx, hostIP, session.AvailableSlots)
-			if err != nil {
-				md.logger.Error(
-					"Error updating available slots for host",
-					slog.String("host_ip", hostIP), slog.String("error", err.Error()),
+			event := pubevts.PlayerJoinRequestedEvent{
+				PlayerID:  playerID,
+				HostID:    &hostID,
+				GameMode:  &result.session.Mode,
+				CreatedAt: time.Now(),
+			}
+
+			if err := md.publisher.PublishPlayerJoinRequested(ctx, event); err != nil {
+				md.logger.Error("Failed to publish player join event",
+					slog.String("player_id", playerID),
+					slog.String("error", err.Error()),
 				)
 			}
-			sessionsCreated++
 		}
 	}
 
-	// Remove matched players from the queue
-	for playerID := range playersToRemove {
-		if err := md.repo.RemovePlayer(ctx, playerID); err != nil {
-			md.logger.Error(
-				"Error removing player from queue",
-				slog.String("player_ip", playerID), slog.String("error", err.Error()),
-			)
-		}
-	}
-
-	md.logger.Debug(
-		"Matching complete: found matches and created game sessions",
-		slog.Int("matches_found", matchesFound), slog.Int("sessions_created", sessionsCreated),
-	)
 	return nil
 }

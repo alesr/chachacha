@@ -66,14 +66,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create the publisher first, which will declare the exchanges
 	publisher, err := events.NewPublisher(ch)
 	if err != nil {
 		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
-		// Continue without event publishing capability
+		os.Exit(1)
 	} else {
-		// Set up monitoring queues after exchanges are created
-		if err := events.SetupMonitoringQueues(ch); err != nil {
+		if err := events.SetupOutputExchangeQueueBindings(ch); err != nil {
 			logger.Error("Failed to set up monitoring queues", slog.String("error", err.Error()))
 			os.Exit(1)
 		} else {
@@ -99,7 +97,6 @@ func main() {
 
 	registry := matchregistry.New(logger, repo, cfg.QueueName, ch, publisher)
 
-	// Setup signal handler for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -111,7 +108,6 @@ func main() {
 		}
 	}()
 
-	// Wait for termination signal
 	sig := <-sigChan
 	logger.Info("Received signal, shutting down...", slog.String("signal", sig.String()))
 	logger.Info("Service shutdown complete")

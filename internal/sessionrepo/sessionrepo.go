@@ -20,6 +20,13 @@ const (
 	hostTTL           = 5 * time.Minute
 	playerTTL         = 2 * time.Minute
 	sessionTTL        = 2 * time.Hour
+
+	// Session states
+
+	SessionStateAwaiting  = "awaiting"
+	SessionStateComplete  = "complete"
+	SessionStateFinished  = "finished"
+	SessionStateCancelled = "cancelled"
 )
 
 type redisClient interface {
@@ -38,6 +45,7 @@ type Session struct {
 	CreatedAt      time.Time        `json:"created_at"`
 	Players        []string         `json:"players"`
 	AvailableSlots uint16           `json:"available_slots"`
+	State          string           `json:"state"`
 }
 
 type Redis struct {
@@ -48,7 +56,8 @@ func NewRedisRepo(redisCli redisClient) (*Redis, error) {
 	return &Redis{client: redisCli}, nil
 }
 
-func (s *Redis) StoreHost(ctx context.Context, host pubevts.HostRegistratioEvent) error {
+// StoreHosts adds a new host now waiting for players to join.
+func (r *Redis) StoreHost(ctx context.Context, host pubevts.HostRegistrationEvent) error {
 	key := hostKeyPrefix + host.HostID
 
 	data, err := json.Marshal(host)
@@ -56,26 +65,42 @@ func (s *Redis) StoreHost(ctx context.Context, host pubevts.HostRegistratioEvent
 		return fmt.Errorf("could not marshal host data: %w", err)
 	}
 
-	if err := s.client.Set(ctx, key, data, hostTTL).Err(); err != nil {
+	if err := r.client.Set(ctx, key, data, hostTTL).Err(); err != nil {
 		return fmt.Errorf("could not store host in Redis: %w", err)
 	}
 
-	if err := s.client.SAdd(ctx, hostsSetKey, key).Err(); err != nil {
+	if err := r.client.SAdd(ctx, hostsSetKey, key).Err(); err != nil {
 		return fmt.Errorf("could not add host to set: %w", err)
 	}
 	return nil
 }
 
-func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slots uint16) error {
-	key := hostKeyPrefix + hostIP
+// RemoveHost removes a host.
+// During the process of removing a host we should check if it has active matches,
+// and handle the players accordingly.
+func (s *Redis) RemoveHost(ctx context.Context, hostID string) error {
+	key := hostKeyPrefix + hostID
 
-	// Get the current host data
+	if err := s.client.SRem(ctx, hostsSetKey, key).Err(); err != nil {
+		return fmt.Errorf("could not remove host from set: %w", err)
+	}
+
+	if err := s.client.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("could not delete host data: %w", err)
+	}
+	return nil
+}
+
+// UpdateHostAvailableSlots updates the slots of a match when a new player joins or leave a session.
+func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostID string, slots uint16) error {
+	key := hostKeyPrefix + hostID
+
 	data, err := s.client.Get(ctx, key).Bytes()
 	if err != nil {
 		return fmt.Errorf("could not get host data for updating: %w", err)
 	}
 
-	var host pubevts.HostRegistratioEvent
+	var host pubevts.HostRegistrationEvent
 	if err := json.Unmarshal(data, &host); err != nil {
 		return fmt.Errorf("could not unmarshal host data: %w", err)
 	}
@@ -93,7 +118,8 @@ func (s *Redis) UpdateHostAvailableSlots(ctx context.Context, hostIP string, slo
 	return nil
 }
 
-func (s *Redis) StorePlayer(ctx context.Context, player pubevts.MatchRequestEvent) error {
+// StorePlayer adds a new player looking for a match.
+func (r *Redis) StorePlayer(ctx context.Context, player pubevts.PlayerMatchRequestEvent) error {
 	key := playerKeyPrefix + player.PlayerID
 
 	data, err := json.Marshal(player)
@@ -101,32 +127,33 @@ func (s *Redis) StorePlayer(ctx context.Context, player pubevts.MatchRequestEven
 		return fmt.Errorf("could not marshal player data: %w", err)
 	}
 
-	if err := s.client.Set(ctx, key, data, playerTTL).Err(); err != nil {
+	if err := r.client.Set(ctx, key, data, playerTTL).Err(); err != nil {
 		return fmt.Errorf("could not store player in Redis: %w", err)
 	}
 
-	if err := s.client.SAdd(ctx, playersSetKey, key).Err(); err != nil {
+	if err := r.client.SAdd(ctx, playersSetKey, key).Err(); err != nil {
 		return fmt.Errorf("could not add player to set: %w", err)
 	}
 	return nil
 }
 
+// RemovePlayer removes a player.
+// If the player is in an existing session, we should be removed from it
+// and the avaiable session slots be updated.
 func (s *Redis) RemovePlayer(ctx context.Context, playerID string) error {
 	key := playerKeyPrefix + playerID
 
-	// Remove from the players set
 	if err := s.client.SRem(ctx, playersSetKey, key).Err(); err != nil {
 		return fmt.Errorf("could not remove player from set: %w", err)
 	}
 
-	// Delete the player data
 	if err := s.client.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("could not delete player data: %w", err)
 	}
 	return nil
 }
 
-func (s *Redis) StoreGameSession(ctx context.Context, session *Session) error {
+func (r *Redis) StoreGameSession(ctx context.Context, session *Session) error {
 	key := sessionKeyPrefix + session.ID
 
 	data, err := json.Marshal(session)
@@ -134,22 +161,20 @@ func (s *Redis) StoreGameSession(ctx context.Context, session *Session) error {
 		return fmt.Errorf("could not marshal game session data: %w", err)
 	}
 
-	// Store the game session with TTL
-	if err := s.client.Set(ctx, key, data, sessionTTL).Err(); err != nil {
+	if err := r.client.Set(ctx, key, data, sessionTTL).Err(); err != nil {
 		return fmt.Errorf("could not store game session in Redis: %w", err)
 	}
 
-	// Add to the active sessions set
-	if err := s.client.SAdd(ctx, activeSessionsKey, key).Err(); err != nil {
+	if err := r.client.SAdd(ctx, activeSessionsKey, key).Err(); err != nil {
 		return fmt.Errorf("could not add session to active sessions set: %w", err)
 	}
 	return nil
 }
 
-func (s *Redis) GetGameSession(ctx context.Context, sessionID string) (*Session, error) {
+func (r *Redis) GetGameSession(ctx context.Context, sessionID string) (*Session, error) {
 	key := sessionKeyPrefix + sessionID
 
-	data, err := s.client.Get(ctx, key).Bytes()
+	data, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, fmt.Errorf("game session not found: %s", sessionID)
@@ -164,19 +189,18 @@ func (s *Redis) GetGameSession(ctx context.Context, sessionID string) (*Session,
 	return &session, nil
 }
 
-func (s *Redis) GetActiveGameSessions(ctx context.Context) ([]*Session, error) {
-	sessionKeys, err := s.client.SMembers(ctx, activeSessionsKey).Result()
+func (r *Redis) GetActiveGameSessions(ctx context.Context) ([]*Session, error) {
+	sessionKeys, err := r.client.SMembers(ctx, activeSessionsKey).Result()
 	if err != nil {
 		return nil, fmt.Errorf("could not get active session keys from set: %w", err)
 	}
 
 	sessions := make([]*Session, 0, len(sessionKeys))
 	for _, key := range sessionKeys {
-		data, err := s.client.Get(ctx, key).Bytes()
+		data, err := r.client.Get(ctx, key).Bytes()
 		if err != nil {
 			if err == redis.Nil {
-				// Session expired but still in the set, clean it up
-				s.client.SRem(ctx, activeSessionsKey, key)
+				r.client.SRem(ctx, activeSessionsKey, key)
 				continue
 			}
 			return nil, fmt.Errorf("could not get session data from Redis: %w", err)
@@ -191,25 +215,24 @@ func (s *Redis) GetActiveGameSessions(ctx context.Context) ([]*Session, error) {
 	return sessions, nil
 }
 
-func (s *Redis) GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, error) {
-	hostKeys, err := s.client.SMembers(ctx, hostsSetKey).Result()
+func (r *Redis) GetHosts(ctx context.Context) ([]pubevts.HostRegistrationEvent, error) {
+	hostKeys, err := r.client.SMembers(ctx, hostsSetKey).Result()
 	if err != nil {
 		return nil, fmt.Errorf("could not get host keys from set: %w", err)
 	}
 
-	hosts := make([]pubevts.HostRegistratioEvent, 0, len(hostKeys))
+	hosts := make([]pubevts.HostRegistrationEvent, 0, len(hostKeys))
 	for _, key := range hostKeys {
-		data, err := s.client.Get(ctx, key).Bytes()
+		data, err := r.client.Get(ctx, key).Bytes()
 		if err != nil {
 			if err == redis.Nil {
-				// Host expired but still in the set, clean it up
-				s.client.SRem(ctx, hostsSetKey, key)
+				r.client.SRem(ctx, hostsSetKey, key)
 				continue
 			}
 			return nil, fmt.Errorf("could not get host data from Redis: %w", err)
 		}
 
-		var host pubevts.HostRegistratioEvent
+		var host pubevts.HostRegistrationEvent
 		if err := json.Unmarshal(data, &host); err != nil {
 			return nil, fmt.Errorf("could not unmarshal host data: %w", err)
 		}
@@ -218,29 +241,58 @@ func (s *Redis) GetHosts(ctx context.Context) ([]pubevts.HostRegistratioEvent, e
 	return hosts, nil
 }
 
-func (s *Redis) GetPlayers(ctx context.Context) ([]pubevts.MatchRequestEvent, error) {
-	playerKeys, err := s.client.SMembers(ctx, playersSetKey).Result()
+func (r *Redis) GetPlayers(ctx context.Context) ([]pubevts.PlayerMatchRequestEvent, error) {
+	playerKeys, err := r.client.SMembers(ctx, playersSetKey).Result()
 	if err != nil {
 		return nil, fmt.Errorf("could not get player keys from set: %w", err)
 	}
 
-	players := make([]pubevts.MatchRequestEvent, 0, len(playerKeys))
+	players := make([]pubevts.PlayerMatchRequestEvent, 0, len(playerKeys))
 	for _, key := range playerKeys {
-		data, err := s.client.Get(ctx, key).Bytes()
+		data, err := r.client.Get(ctx, key).Bytes()
 		if err != nil {
 			if err == redis.Nil {
-				// Player expired but still in the set, clean it up
-				s.client.SRem(ctx, playersSetKey, key)
+				r.client.SRem(ctx, playersSetKey, key)
 				continue
 			}
 			return nil, fmt.Errorf("could not get player data from Redis: %w", err)
 		}
 
-		var player pubevts.MatchRequestEvent
+		var player pubevts.PlayerMatchRequestEvent
 		if err := json.Unmarshal(data, &player); err != nil {
 			return nil, fmt.Errorf("could not unmarshal player data: %w", err)
 		}
 		players = append(players, player)
 	}
 	return players, nil
+}
+
+func (r *Redis) GetHostInActiveSession(ctx context.Context, hostID string) (*Session, error) {
+	sessions, err := r.GetActiveGameSessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not get active sessions: %w", err)
+	}
+
+	for _, session := range sessions {
+		if session.HostID == hostID {
+			return session, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *Redis) GetPlayerInActiveSession(ctx context.Context, playerID string) (*Session, error) {
+	sessions, err := r.GetActiveGameSessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not get active sessions: %w", err)
+	}
+
+	for _, session := range sessions {
+		for _, player := range session.Players {
+			if player == playerID {
+				return session, nil
+			}
+		}
+	}
+	return nil, nil
 }
