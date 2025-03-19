@@ -26,7 +26,7 @@ func TestNewRedisRepo(t *testing.T) {
 func TestRedis_StoreHost(t *testing.T) {
 	t.Parallel()
 
-	givenHost := pubevts.HostRegistratioEvent{
+	givenHost := pubevts.HostRegistrationEvent{
 		HostID:         "host-123",
 		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: 4,
@@ -46,11 +46,10 @@ func TestRedis_StoreHost(t *testing.T) {
 				assert.Equal(t, hostKeyPrefix+givenHost.HostID, key)
 				assert.Equal(t, hostTTL, expiration)
 
-				// Verify the JSON data
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var host pubevts.HostRegistratioEvent
+				var host pubevts.HostRegistrationEvent
 				err := json.Unmarshal(valueBytes, &host)
 				assert.NoError(t, err)
 				assert.Equal(t, givenHost, host)
@@ -137,7 +136,7 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 	originalSlots := uint16(4)
 	updatedSlots := uint16(2)
 
-	givenHost := pubevts.HostRegistratioEvent{
+	givenHost := pubevts.HostRegistrationEvent{
 		HostID:         hostID,
 		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: originalSlots,
@@ -167,11 +166,10 @@ func TestRedis_UpdateHostAvailableSlots(t *testing.T) {
 				assert.Equal(t, hostKeyPrefix+hostID, key)
 				assert.Equal(t, hostTTL, expiration)
 
-				// Verify the JSON data has updated slots
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var host pubevts.HostRegistratioEvent
+				var host pubevts.HostRegistrationEvent
 				err := json.Unmarshal(valueBytes, &host)
 				assert.NoError(t, err)
 				assert.Equal(t, updatedSlots, host.AvailableSlots)
@@ -250,7 +248,7 @@ func TestRedis_StorePlayer(t *testing.T) {
 
 	gameMode := pubevts.GameMode("deathmatch")
 	hostID := "host-123"
-	givenPlayer := pubevts.MatchRequestEvent{
+	givenPlayer := pubevts.PlayerMatchRequestEvent{
 		PlayerID: "player-456",
 		HostID:   &hostID,
 		Mode:     &gameMode,
@@ -270,11 +268,10 @@ func TestRedis_StorePlayer(t *testing.T) {
 				assert.Equal(t, playerKeyPrefix+givenPlayer.PlayerID, key)
 				assert.Equal(t, playerTTL, expiration)
 
-				// Verify the JSON data
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
-				var player pubevts.MatchRequestEvent
+				var player pubevts.PlayerMatchRequestEvent
 				err := json.Unmarshal(valueBytes, &player)
 				assert.NoError(t, err)
 				assert.Equal(t, givenPlayer, player)
@@ -475,7 +472,6 @@ func TestRedis_StoreGameSession(t *testing.T) {
 				assert.Equal(t, sessionKeyPrefix+givenSession.ID, key)
 				assert.Equal(t, sessionTTL, expiration)
 
-				// Verify the JSON data
 				valueBytes, ok := value.([]byte)
 				assert.True(t, ok)
 
@@ -807,13 +803,13 @@ func TestRedis_GetActiveGameSessions(t *testing.T) {
 func TestRedis_GetHosts(t *testing.T) {
 	t.Parallel()
 
-	host1 := pubevts.HostRegistratioEvent{
+	host1 := pubevts.HostRegistrationEvent{
 		HostID:         "host-123",
 		Mode:           pubevts.GameMode("deathmatch"),
 		AvailableSlots: 4,
 	}
 
-	host2 := pubevts.HostRegistratioEvent{
+	host2 := pubevts.HostRegistrationEvent{
 		HostID:         "host-124",
 		Mode:           pubevts.GameMode("capture-flag"),
 		AvailableSlots: 6,
@@ -835,7 +831,7 @@ func TestRedis_GetHosts(t *testing.T) {
 		expectErr          bool
 		expectSMembersCall bool
 		expectGetCall      bool
-		expectHosts        []pubevts.HostRegistratioEvent
+		expectHosts        []pubevts.HostRegistrationEvent
 	}{
 		{
 			name: "successful get multiple hosts",
@@ -858,7 +854,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectHosts:        []pubevts.HostRegistratioEvent{host1, host2},
+			expectHosts:        []pubevts.HostRegistrationEvent{host1, host2},
 		},
 		{
 			name: "smembers fails",
@@ -890,7 +886,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      false,
-			expectHosts:        []pubevts.HostRegistratioEvent{},
+			expectHosts:        []pubevts.HostRegistrationEvent{},
 		},
 		{
 			name: "host expired but still in set",
@@ -907,7 +903,7 @@ func TestRedis_GetHosts(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectHosts:        []pubevts.HostRegistratioEvent{},
+			expectHosts:        []pubevts.HostRegistrationEvent{},
 		},
 	}
 
@@ -955,13 +951,13 @@ func TestRedis_GetPlayers(t *testing.T) {
 	hostID1 := "host-123"
 	hostID2 := "host-124"
 
-	player1 := pubevts.MatchRequestEvent{
+	player1 := pubevts.PlayerMatchRequestEvent{
 		PlayerID: "player-456",
 		HostID:   &hostID1,
 		Mode:     &gameMode1,
 	}
 
-	player2 := pubevts.MatchRequestEvent{
+	player2 := pubevts.PlayerMatchRequestEvent{
 		PlayerID: "player-457",
 		HostID:   &hostID2,
 		Mode:     &gameMode2,
@@ -983,7 +979,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 		expectErr          bool
 		expectSMembersCall bool
 		expectGetCall      bool
-		expectPlayers      []pubevts.MatchRequestEvent
+		expectPlayers      []pubevts.PlayerMatchRequestEvent
 	}{
 		{
 			name: "successful get multiple players",
@@ -1006,7 +1002,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectPlayers:      []pubevts.MatchRequestEvent{player1, player2},
+			expectPlayers:      []pubevts.PlayerMatchRequestEvent{player1, player2},
 		},
 		{
 			name: "smembers fails",
@@ -1038,7 +1034,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      false,
-			expectPlayers:      []pubevts.MatchRequestEvent{},
+			expectPlayers:      []pubevts.PlayerMatchRequestEvent{},
 		},
 		{
 			name: "player expired but still in set",
@@ -1055,7 +1051,7 @@ func TestRedis_GetPlayers(t *testing.T) {
 			expectErr:          false,
 			expectSMembersCall: true,
 			expectGetCall:      true,
-			expectPlayers:      []pubevts.MatchRequestEvent{},
+			expectPlayers:      []pubevts.PlayerMatchRequestEvent{},
 		},
 	}
 

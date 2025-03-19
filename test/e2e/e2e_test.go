@@ -59,13 +59,13 @@ func TestMatchmaking(t *testing.T) {
 	publisher, err := events.NewPublisher(ch)
 	if err != nil {
 		logger.Error("Failed to create event publisher", slog.String("error", err.Error()))
-		// Continue without event publishing capability
+		t.Fatal("Failed to create event publisher:", err)
 	}
 
 	registry := matchregistry.New(logger, repo, queueName, ch, publisher)
 
 	matchInterval := 1 * time.Second
-	director, err := matchdirector.New(logger, repo, matchInterval)
+	director, err := matchdirector.New(logger, repo, publisher, matchInterval)
 	require.NoError(t, err)
 
 	go func() {
@@ -107,7 +107,7 @@ func testHostRegistration(t *testing.T, ch *amqp091.Channel, queueName string) {
 	hostID := "111"
 	gameMode := pubevts.GameMode("1v1")
 
-	hostMsg := pubevts.HostRegistratioEvent{
+	hostMsg := pubevts.HostRegistrationEvent{
 		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 2,
@@ -143,7 +143,7 @@ func testPlayerRegistration(t *testing.T, ch *amqp091.Channel, queueName string)
 
 	playerID := ulid.Make().String()
 
-	playerMsg := pubevts.MatchRequestEvent{
+	playerMsg := pubevts.PlayerMatchRequestEvent{
 		PlayerID: playerID,
 	}
 
@@ -178,7 +178,7 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 	hostID := "222"
 	gameMode := pubevts.GameMode("2v2")
 
-	hostMsg := pubevts.HostRegistratioEvent{
+	hostMsg := pubevts.HostRegistrationEvent{
 		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 4,
@@ -208,7 +208,7 @@ func testMatchmakingProcess(t *testing.T, ch *amqp091.Channel, queueName string,
 	for i := 0; i < 3; i++ {
 		playerID := fmt.Sprintf("player-%s-%d", ulid.Make().String(), i)
 
-		playerMsg := pubevts.MatchRequestEvent{
+		playerMsg := pubevts.PlayerMatchRequestEvent{
 			PlayerID: playerID,
 			Mode:     &gameMode,
 		}
@@ -269,7 +269,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 	hostID := "123"
 	gameMode := pubevts.GameMode("free-for-all")
 
-	hostMsg := pubevts.HostRegistratioEvent{
+	hostMsg := pubevts.HostRegistrationEvent{
 		HostID:         hostID,
 		Mode:           gameMode,
 		AvailableSlots: 8,
@@ -298,7 +298,7 @@ func testSpecificHostRequests(t *testing.T, ch *amqp091.Channel, queueName strin
 	for i := 0; i < 4; i++ {
 		playerID := fmt.Sprintf("specific-player-%s-%d", ulid.Make().String(), i)
 
-		playerMsg := pubevts.MatchRequestEvent{
+		playerMsg := pubevts.PlayerMatchRequestEvent{
 			PlayerID: playerID,
 			HostID:   &hostID,
 		}
@@ -349,7 +349,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	hostID1 := "321"
 	gameMode1 := pubevts.GameMode("duel")
 
-	hostMsg1 := pubevts.HostRegistratioEvent{
+	hostMsg1 := pubevts.HostRegistrationEvent{
 		HostID:         hostID1,
 		Mode:           gameMode1,
 		AvailableSlots: 2,
@@ -375,7 +375,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	hostID2 := "456"
 	gameMode2 := pubevts.GameMode("survival")
 
-	hostMsg2 := pubevts.HostRegistratioEvent{
+	hostMsg2 := pubevts.HostRegistrationEvent{
 		HostID:         hostID2,
 		Mode:           gameMode2,
 		AvailableSlots: 10,
@@ -406,7 +406,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	for i := 0; i < 2; i++ {
 		playerID := fmt.Sprintf("duel-player-%s-%d", ulid.Make().String(), i)
 
-		playerMsg := pubevts.MatchRequestEvent{
+		playerMsg := pubevts.PlayerMatchRequestEvent{
 			PlayerID: playerID,
 			Mode:     &gameMode1,
 		}
@@ -433,7 +433,7 @@ func testGameModeFiltering(t *testing.T, ch *amqp091.Channel, queueName string, 
 	for i := 0; i < 3; i++ {
 		playerID := fmt.Sprintf("survival-player-%s-%d", ulid.Make().String(), i)
 
-		playerMsg := pubevts.MatchRequestEvent{
+		playerMsg := pubevts.PlayerMatchRequestEvent{
 			PlayerID: playerID,
 			Mode:     &gameMode2,
 		}
