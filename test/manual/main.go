@@ -30,7 +30,7 @@ var (
 	infoStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#CCCCCC")).Padding(0, 1)
 	warningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFCC00")).Padding(0, 1)
 	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Background(lipgloss.Color("#CC0000")).Padding(0, 1)
-	eventHeaderStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#333333"))
+	eventHeaderStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFCC00"))
 	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("#CC0000"))
 )
@@ -120,8 +120,19 @@ type model struct {
 	eventChan chan Event
 }
 
+var mainProgram *tea.Program
+
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	m := initialModel()
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	mainProgram = p
+
+	go func() {
+		for evt := range m.eventChan {
+			mainProgram.Send(eventMsg{event: evt})
+		}
+	}()
+
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)
 		os.Exit(1)
@@ -180,13 +191,6 @@ func initialModel() model {
 
 	// set up the event monitoring
 	go setupEventObservers(ch, m.eventChan)
-
-	go func() {
-		for evt := range m.eventChan {
-			p := tea.NewProgram(m)
-			p.Send(eventMsg{event: evt})
-		}
-	}()
 	return m
 }
 
@@ -590,7 +594,7 @@ func (m model) View() string {
 		s += "Please enter the host details:\n\n"
 
 		for i, input := range m.inputs {
-			label := ""
+			var label string
 			switch i {
 			case 0:
 				label = "Host ID (leave empty for random):"
@@ -599,7 +603,6 @@ func (m model) View() string {
 			case 2:
 				label = "Available player slots:"
 			}
-
 			s += fmt.Sprintf("%s\n%s\n\n", label, input.View())
 		}
 
@@ -616,7 +619,7 @@ func (m model) View() string {
 		s += "Please enter the player details:\n\n"
 
 		for i, input := range m.inputs {
-			label := ""
+			var label string
 			switch i {
 			case 0:
 				label = "Player ID (leave empty for random):"

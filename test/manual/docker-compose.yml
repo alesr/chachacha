@@ -71,3 +71,11 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       REDIS_ADDR: redis:6379
       QUEUE_NAME: matchmaking_queue
+
+x-bake:
+  group:
+    default:
+      targets:
+        - lobby
+        - matcher
+        - test-client

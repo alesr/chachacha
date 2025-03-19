@@ -4,3 +4,5 @@
 Named after the lively dance that brings partners together, chachacha helps match players with game hosts - pairing them up just like dance partners on the floor.
 
 WIP
+
+Documentation coming soon!
